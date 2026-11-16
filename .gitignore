@@ -1,0 +1,26 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+ai-service/venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/test-results/
+frontend/playwright-report/
+
+# PHP
+backend/vendor/
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
