@@ -60,6 +60,18 @@ jobs:
       - name: Run pytest
         run: python -m pytest -q
 
+      # Golden question set, scored for answers, citations, refusals and RBAC
+      # safety. Structural tier: in-process, no database or Ollama.
+      - name: Run RAG evaluation
+        run: python -m eval.run_eval --structural
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rag-eval-report
+          path: ai-service/eval/reports
+          retention-days: 14
+
   frontend:
     name: Frontend (lint, build, Playwright)
     runs-on: ubuntu-latest

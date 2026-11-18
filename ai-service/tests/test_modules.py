@@ -98,6 +98,32 @@ class TestHybridSearch:
         assert "PO-2024-11" in captured["params"]
 
 
+class TestCitedSources:
+    chunks = [
+        Chunk(1, "Procurement SOP", 2, "three quotes", 0.9),
+        Chunk(2, "Travel Policy", 1, "economy", 0.6),
+        Chunk(1, "Procurement SOP", 3, "CFO", 0.6),
+    ]
+
+    def test_only_documents_the_answer_cites_are_returned(self):
+        sources = rag.cited_sources("Three quotes are needed [Procurement SOP, Page 2].", self.chunks)
+
+        assert {source["document_id"] for source in sources} == {1}
+
+    def test_a_wrong_page_still_matches_the_document(self):
+        sources = rag.cited_sources("See [procurement sop, page 9].", self.chunks)
+
+        assert {source["document_title"] for source in sources} == {"Procurement SOP"}
+
+    def test_no_recognisable_citation_falls_back_to_every_retrieved_source(self):
+        assert len(rag.cited_sources("Three quotes.", self.chunks)) == 3
+
+    def test_a_citation_to_an_unretrieved_document_is_ignored(self):
+        sources = rag.cited_sources("Per [Secret Merger Plan, Page 1].", self.chunks)
+
+        assert "Secret Merger Plan" not in {source["document_title"] for source in sources}
+
+
 class TestFollowUps:
     def test_retrieval_embeds_the_previous_user_question_with_the_follow_up(self):
         request = make_request(

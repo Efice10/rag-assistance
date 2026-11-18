@@ -238,6 +238,24 @@ def unique_sources(chunks: list[Chunk]) -> list[dict]:
     return sources
 
 
+_CITATION = re.compile(r"\[([^\[\]]+?),\s*Page\s*(\d+)\]", re.I)
+
+
+def cited_sources(answer: str, chunks: list[Chunk]) -> list[dict]:
+    """The sources the answer actually cites ([Title, Page N]), in the order
+    retrieved. If the model cited nothing recognisable, fall back to every
+    retrieved source rather than show none."""
+    cited = {(title.strip().lower(), int(page)) for title, page in _CITATION.findall(answer)}
+    cited_titles = {title for title, _ in cited}
+    matched = [
+        chunk for chunk in chunks
+        if (chunk.document_title.lower(), chunk.page_number) in cited
+        # A right title with a wrong page number still points at the right document.
+        or chunk.document_title.lower() in cited_titles
+    ]
+    return unique_sources(matched or chunks)
+
+
 def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -264,7 +282,7 @@ def answer_stream(request: QueryRequest) -> Iterator[str]:
 
         # A refusal cites nothing, even though excerpts were retrieved.
         refused = "do not have authorized access" in answer.lower()
-        yield sse("sources", {"sources": [] if refused else unique_sources(chunks)})
+        yield sse("sources", {"sources": [] if refused else cited_sources(answer, chunks)})
         yield sse("done", {})
     except Exception as error:  # noqa: BLE001 - the stream must end cleanly
         print(f"[query] failed: {error!r}", flush=True)
