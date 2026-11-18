@@ -236,3 +236,13 @@ Chat stream events: `token` (`{"text"}`), `sources` (`{"sources":[{document_id, 
 - SSO reads the identity from the provider's userinfo endpoint after a server-side code exchange; it does not validate the ID token signature, so the provider must be reached over HTTPS (enforced).
 - `php artisan serve` handles one request at a time on Windows, so other requests wait while an answer is streaming. Use a real web server for more than one concurrent user.
 - The AI service reads uploads from the local disk. Moving to `FILESYSTEM_DISK=s3` works for Laravel as-is, but the AI service would then need to fetch the file from S3.
+
+## Project documents
+
+| Document | Contents |
+|---|---|
+| [docs/roadmap.md](docs/roadmap.md) | Phase 1: the 15 modules built, and open items |
+| [docs/roadmap-phase-2.md](docs/roadmap-phase-2.md) | Phase 2: proposed modules 16 to 28, with a build order |
+| [knowledge/introduction.md](knowledge/introduction.md) | The original specification |
+| [knowledge/blueprint.md](knowledge/blueprint.md) | Windows installation guide and daily runbook |
+| [CLAUDE.md](CLAUDE.md) | Working rules for Claude Code in this repository |
