@@ -1,6 +1,6 @@
 # Module 29: Event Calendar
 
-Proposed 2026-11-18. **Status: designed, not started.** Build only when the owner asks for it.
+Proposed 2026-11-18. **Status: designed, open questions decided, not started.** Build only when the owner asks for it.
 
 Part of [roadmap-phase-2.md](roadmap-phase-2.md) as module 29. Related modules:
 
@@ -29,6 +29,18 @@ Turn dated memos into calendar events. Dates mentioned in uploaded documents (fo
 - Browser push notifications.
 - Recurring events.
 - `.ics` export: a cheap later win that gives users real notifications through their own Google or Outlook calendar, with no server-side mail.
+
+## Decisions (owner, 2026-11-18)
+
+| Question | Decision |
+|---|---|
+| Which dates become events? | **Future dates near event words** only (meeting, training, deadline, due, briefing, audit, and similar). Effective dates, validity periods and past dates are not events. |
+| Who reviews extracted events? | **Admins**, for their whole organization, and **managers**, for their own department (only events they can see). |
+| Can events skip review? | **No.** Every extracted event waits for a person to confirm it. |
+| Who sees an event? | **Exactly the people who can see its source document.** No widening, not even by admins. |
+| What happens on re-index or a new version? | **Confirmed and rejected decisions are kept** when the same dates are still in the document (with any title or date corrections). Only new or changed dates go to review; dates that disappeared are removed. |
+| Times of day? | **Dates only** for now (all-day events). A time written in the memo stays visible in the snippet. |
+| How far ahead do reminders look? | **Set by the admin per organization** (default 7 days). |
 
 ## Flow
 
@@ -62,7 +74,9 @@ One ingest serves both purposes: chunks answer chat questions, and events fill t
 
 - **Event title.** The sentence containing the date, with the date text removed, truncated to about 80 characters. Falls back to the document title.
 - **Source.** The raw snippet and `page_number` are stored, so the review panel and the calendar detail can cite `[Document Title, Page N]`.
+- **Only event dates.** A date becomes an event only when it is today or later and its sentence contains an event word: meeting, briefing, training, workshop, session, deadline, due, submit, audit, inspection, review, town hall (the list lives in one constant, so it can grow). "Effective 1 January 2027" or "valid until 31 March 2027" are not events.
 - **Ignored.** Non-committal text such as "TBC", or "early December" without a day.
+- **Times.** Not stored: events are all-day. "9:00 am" stays readable in the snippet.
 - **Sanity cap.** `EVENTS_MAX_PER_DOC` (default 50); more than that suggests mis-parsing.
 - **Later, optional.** `llama3.2` could refine event titles from messy memos, behind a config switch. Deterministic extraction ships first: fast, free and testable.
 
@@ -81,20 +95,29 @@ event_dismissals:                        -- silences the reminder banner per use
   id, user_id (FK), event_id (FK), unique(user_id, event_id), created_at
 ```
 
+```text
+organizations:
+  + event_reminder_days  (default 7, between 1 and 60)   -- how far ahead reminders look
+```
+
 - Plain columns only, so the migration needs no PostgreSQL/SQLite branching.
-- The AI service writes events **in the same transaction as the chunks**: delete, then insert, per `document_id`, so a re-ingest replaces them. This mirrors the existing chunk pattern.
-- Superseded versions lose their events in the same transaction that removes their chunks (`ingest.supersede()`). A revised memo therefore *moves* the meeting instead of duplicating it.
+- The AI service writes events **in the same transaction as the chunks**, mirroring the existing chunk pattern.
+- **Decisions survive re-indexing.** Before replacing a document's events, the AI service reads the existing reviewed events of that document, and of the versions it supersedes. A newly extracted event with the same `starts_at` and `ends_at` as a reviewed one inherits its status (`confirmed` or `rejected`), its corrected title and dates, and `confirmed_by`/`confirmed_at`. Events with new dates are `pending`; reviewed events whose dates no longer appear are deleted.
+- Superseded versions lose their own events in the same transaction that removes their chunks (`ingest.supersede()`), after their decisions have been carried over to the new version. A revised memo therefore *moves* the meeting instead of duplicating it, and an unchanged meeting stays confirmed.
 
 ## 3. Backend: endpoints and policy
 
 | Endpoint | Who | What |
 |---|---|---|
 | `GET /api/events?from=&to=` | any user | Confirmed events in the window, scope-filtered (`organization = ? AND department = ? AND clearance <= ?`; admins drop the department filter). The events twin of `Document::scopeVisibleTo()`. |
-| `GET /api/events/upcoming?days=7` | any user | Confirmed events starting within N days, plus ongoing ones (`ends_at >= today`), minus the ones the user dismissed |
+| `GET /api/events/upcoming` | any user | Confirmed events starting within the organization's `event_reminder_days`, plus ongoing ones (`ends_at >= today`), minus the ones the user dismissed |
 | `POST /api/events/{id}/dismiss` | any user | Silence the reminder for a visible event; the event stays on the calendar |
-| `GET /api/admin/events/pending` | admin | Pending events in their organization, with document title and snippet |
-| `POST /api/events/{id}/confirm` | admin | Confirm, optionally correcting `title`, `starts_at` or `ends_at` (an admin fixing a mis-parse) |
-| `POST /api/events/{id}/reject` | admin | Mark as rejected (a junk extraction); never shown |
+| `GET /api/events/pending` | admin, manager | Pending events the reviewer may decide: the whole organization for admins, their own department (within their clearance) for managers; with document title and snippet |
+| `POST /api/events/{id}/confirm` | admin, manager in scope | Confirm, optionally correcting `title`, `starts_at` or `ends_at` (fixing a mis-parse) |
+| `POST /api/events/{id}/reject` | admin, manager in scope | Mark as rejected (a junk extraction); never shown |
+| `PUT /api/admin/settings` | admin | Set `event_reminder_days` for the organization (audited) |
+
+- Reviewers are the people who can manage the source document (`Document::manageableBy()`): admins in their organization, managers in their own department and within their clearance. Staff never review.
 
 - "Today" is computed server-side in Laravel. Dates are date-only, so no time zones enter the system.
 - Confirm and reject write an audit row with `AuditLog::recordAdminAction()`.
@@ -106,8 +129,9 @@ event_dismissals:                        -- silences the reminder banner per use
 - **Navigation.** A **Calendar** item (`CalendarDays` icon) in the *Workspace* group of `AppShell`, after Documents, with a numeric badge from `/events/upcoming`.
 - **Month grid.** Hand-rolled like the rest of the UI (no calendar library): previous and next month, today highlighted, event chips coloured like the clearance badges, and a click on a day lists that day's events. About 200 lines.
 - **Event detail panel.** Title, date range (shown as "1–2 December 2026"), the source `[Document Title, Page N]` opening the citation viewer used in chat, and the existing access-checked Download.
-- **Admin review panel** (admins only, same page). Pending events with snippet and document. Each row is editable (title, dates) with Confirm and Reject, the same interaction as approving a held document.
-- **Reminder banner** in `AppShell`, fetched once per sign-in like the `/me` refresh: "3 upcoming events in the next 7 days", each entry dismissable, plus a "View calendar" link. Dismissed events never come back as reminders; the calendar still shows them.
+- **Review panel** (admins and managers, same page). Pending events they may decide, with snippet and document. Each row is editable (title, dates) with Confirm and Reject, the same interaction as approving a held document. A count of pending events shows on the Calendar nav item for reviewers.
+- **Reminder banner** in `AppShell`, fetched once per sign-in like the `/me` refresh: "3 upcoming events in the next 7 days" (using the organization's setting), each entry dismissable, plus a "View calendar" link. Dismissed events never come back as reminders; the calendar still shows them.
+- **Setting.** Admins set the reminder window on the Users page, next to the single sign-on settings.
 - **Conventions.** The visible month survives a refresh through `lib/useUrlParam.ts`; confirmations and messages go through `lib/feedback.ts`; colours use the theme tokens so dark mode works.
 
 ## 5. Tests
@@ -116,6 +140,8 @@ event_dismissals:                        -- silences the reminder banner per use
 - Range parsing: "1-2 December 2026" gives two dates.
 - Single dates, and year inference when the year is missing.
 - "TBC" and month-only text are ignored.
+- Dates without an event word ("effective 1 January 2027") and past dates are ignored.
+- Re-index keeps a confirmed event (and its corrected title) when its dates are unchanged, keeps a rejection, makes a new date pending, and removes a date that disappeared; a new version inherits the old version's decisions the same way.
 - Title taken from the sentence; page number attached.
 - The events cap.
 - A flagged document stores no events.
@@ -123,7 +149,8 @@ event_dismissals:                        -- silences the reminder banner per use
 
 **Pest**
 - `/events` and `/events/upcoming` respect organization, department and clearance (staff at L1 never see a Restricted event; other organizations' events are invisible).
-- Non-admins get 403 on confirm and reject.
+- Staff get 403 on confirm and reject; a manager can decide events of their own department only (another department's event answers 404); admins can decide any in their organization.
+- `/events/upcoming` uses the organization's reminder window; only admins can change it.
 - Dismissal works only for visible events, once per user.
 - A confirm with corrections saves the edits and writes an audit row.
 
@@ -136,7 +163,7 @@ event_dismissals:                        -- silences the reminder banner per use
 
 ## 6. Effort and dependencies
 
-**Effort: M.** One set of migrations, one extraction module, six endpoints, one page plus shell additions, and tests at each layer.
+**Effort: M.** One set of migrations, one extraction module (with the carry-over of review decisions), seven endpoints, one page plus shell additions, and tests at each layer.
 
 **Depends on nothing new.** The approval-review pattern, the citation viewer, version superseding and the RBAC conventions all exist already.
 
