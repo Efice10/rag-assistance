@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Download, Loader2, Search, ShieldAlert } fro
 import { useEffect, useState } from "react";
 import { api, errorMessage, saveBlob } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useUrlNumber, useUrlParam } from "@/lib/useUrlParam";
 import type { AuditLogItem, PageMeta } from "@/lib/types";
 
 /** Administrative actions, labelled so they stand apart from chat prompts. */
@@ -24,9 +25,9 @@ export default function AuditLogsPage() {
   const isAdmin = session?.user.role === "admin";
   const [logs, setLogs] = useState<AuditLogItem[] | null>(null);
   const [meta, setMeta] = useState<PageMeta | null>(null);
-  const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [page, setPage] = useUrlNumber("page", 1);
+  const [search, setSearch] = useUrlParam("q", "");
+  const [searchInput, setSearchInput] = useState(search);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -127,7 +128,7 @@ export default function AuditLogsPage() {
             onClick={exportCsv}
             disabled={exporting}
             title={search ? `Export records matching "${search}"` : "Export every record"}
-            className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-on-accent hover:bg-indigo-500 disabled:opacity-50"
           >
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
             Export CSV
@@ -213,7 +214,7 @@ export default function AuditLogsPage() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              onClick={() => setPage(Math.max(1, page - 1))}
               disabled={meta.current_page <= 1}
               className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
@@ -221,7 +222,7 @@ export default function AuditLogsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setPage((current) => current + 1)}
+              onClick={() => setPage(page + 1)}
               disabled={meta.current_page >= meta.last_page}
               className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >

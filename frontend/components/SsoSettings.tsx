@@ -3,6 +3,7 @@
 import { KeyRound, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
+import { toast } from "@/lib/feedback";
 import { CLEARANCE_LABELS, type DepartmentRow } from "@/lib/types";
 
 interface Settings {
@@ -70,7 +71,7 @@ export function SsoSettings({ departments }: { departments: DepartmentRow[] }) {
       });
       setHasSecret(data.data.has_client_secret);
       setForm((current) => ({ ...current, client_secret: "" }));
-      setMessage({ ok: true, text: "Saved." });
+      toast.success("Single sign-on settings saved.");
     } catch (err) {
       setMessage({ ok: false, text: errorMessage(err, "Could not save the settings.") });
     } finally {
@@ -158,7 +159,7 @@ export function SsoSettings({ departments }: { departments: DepartmentRow[] }) {
             <button
               type="submit"
               disabled={saving || departments.length === 0}
-              className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-on-accent hover:bg-indigo-500 disabled:opacity-50"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />} Save
             </button>

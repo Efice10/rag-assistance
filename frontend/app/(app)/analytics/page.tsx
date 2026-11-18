@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ClearanceBadge } from "@/components/Badges";
 import { api, errorMessage } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useUrlNumber } from "@/lib/useUrlParam";
 
 interface Metrics {
   days: number;
@@ -40,7 +41,7 @@ function percent(value: number | null): string {
 export default function AnalyticsPage() {
   const session = useSession();
   const isAdmin = session?.user.role === "admin";
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useUrlNumber("days", 30, RANGES);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,7 +90,7 @@ export default function AnalyticsPage() {
               onClick={() => setDays(range)}
               aria-pressed={days === range}
               className={`rounded px-3 py-1.5 text-sm font-medium ${
-                days === range ? "bg-indigo-600 text-white" : "text-slate-700 hover:bg-slate-100"
+                days === range ? "bg-indigo-600 text-on-accent" : "text-slate-700 hover:bg-slate-100"
               }`}
             >
               {range} days
@@ -232,7 +233,7 @@ function QueriesChart({ data }: { data: { date: string; count: number }[] }) {
         {data.map((day) => (
           <div key={day.date} className="group relative flex h-full flex-1 items-end">
             <div
-              className="w-full rounded-t bg-indigo-600 group-hover:bg-indigo-800"
+              className="w-full rounded-t bg-indigo-600 group-hover:bg-indigo-500"
               style={{ height: `${(day.count / max) * 100}%`, minHeight: day.count ? 2 : 0 }}
             />
             <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white group-hover:block">

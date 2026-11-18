@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ClearanceBadge, StatusBadge } from "@/components/Badges";
 import { UploadModal } from "@/components/UploadModal";
 import { api, downloadDocument, errorMessage } from "@/lib/api";
+import { confirmAction, toast } from "@/lib/feedback";
 import { useSession } from "@/lib/session";
 import type { DocumentItem } from "@/lib/types";
 
@@ -49,16 +50,23 @@ export default function DocumentsPage() {
   }, [inProgress, load]);
 
   async function act(doc: DocumentItem, action: "reindex" | "approve") {
-    if (action === "approve" && !window.confirm(`Approve "${doc.title}" for indexing? This is recorded in the audit log.`)) {
-      return;
+    if (action === "approve") {
+      const confirmed = await confirmAction({
+        title: `Approve "${doc.title}" for indexing?`,
+        body: `${(doc.error_message ?? "This document was held for review").replace(/\.?\s*$/, ".")} Approve only if you have read it and the flagged text is harmless. Your approval is recorded in the audit log.`,
+        confirmLabel: "Approve and index",
+      });
+      if (!confirmed) {
+        return;
+      }
     }
     setActingId(doc.id);
-    setError(null);
     try {
       const { data } = await api.post<{ data: DocumentItem }>(`/documents/${doc.id}/${action}`);
       setDocuments((current) => current?.map((item) => (item.id === doc.id ? data.data : item)) ?? null);
+      toast.success(action === "approve" ? `"${doc.title}" approved and queued for indexing.` : `"${doc.title}" was queued again.`);
     } catch (err) {
-      setError(errorMessage(err, action === "approve" ? "Could not approve the document." : "Could not reindex the document."));
+      toast.error(errorMessage(err, action === "approve" ? "Could not approve the document." : "Could not reindex the document."));
     } finally {
       setActingId(null);
     }
@@ -99,7 +107,7 @@ export default function DocumentsPage() {
           <button
             type="button"
             onClick={() => setUploading(true)}
-            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-on-accent hover:bg-indigo-500"
           >
             <Upload className="h-4 w-4" aria-hidden />
             Upload document
@@ -184,7 +192,7 @@ export default function DocumentsPage() {
                         onClick={() => act(doc, "approve")}
                         disabled={actingId === doc.id}
                         title="You have read the document and the flagged text is harmless"
-                        className="mr-1.5 inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                        className="mr-1.5 inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-on-accent hover:bg-amber-500 disabled:opacity-50"
                       >
                         <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Approve
                       </button>

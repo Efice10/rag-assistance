@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ClearanceBadge } from "@/components/Badges";
 import { SourceViewer } from "@/components/SourceViewer";
 import { api, errorMessage } from "@/lib/api";
+import { confirmAction, toast } from "@/lib/feedback";
 import { useSession } from "@/lib/session";
 import { streamChat } from "@/lib/sse";
 import type { ConversationSummary, Feedback, Source, StoredMessage } from "@/lib/types";
@@ -55,6 +56,7 @@ export default function ChatPage() {
   const abort = useRef<AbortController | null>(null);
   const nextKey = useRef(1);
   const bottom = useRef<HTMLDivElement>(null);
+  const promptBox = useRef<HTMLTextAreaElement>(null);
 
   const loadConversations = useCallback(() => {
     api
@@ -72,6 +74,15 @@ export default function ChatPage() {
   }, [messages]);
 
   useEffect(() => () => abort.current?.abort(), []);
+
+  // Grow the question box with its text, up to about eight lines.
+  useEffect(() => {
+    const box = promptBox.current;
+    if (box) {
+      box.style.height = "auto";
+      box.style.height = `${Math.min(box.scrollHeight, 200)}px`;
+    }
+  }, [prompt]);
 
   function patch(key: number, change: (message: Message) => Message) {
     setMessages((current) => current.map((message) => (message.key === key ? change(message) : message)));
@@ -116,7 +127,13 @@ export default function ChatPage() {
   }
 
   async function remove(id: number) {
-    if (!window.confirm("Delete this conversation? The audit log keeps its own record of the prompts.")) {
+    const confirmed = await confirmAction({
+      title: "Delete this conversation?",
+      body: "It is removed from your history. The audit log keeps its own record of the prompts.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
     try {
@@ -125,8 +142,9 @@ export default function ChatPage() {
       if (id === conversationId) {
         startNew();
       }
+      toast.success("Conversation deleted.");
     } catch (err) {
-      setNotice(errorMessage(err, "Could not delete that conversation."));
+      toast.error(errorMessage(err, "Could not delete that conversation."));
     }
   }
 
@@ -312,7 +330,7 @@ export default function ChatPage() {
               {messages.map((message) =>
                 message.role === "user" ? (
                   <div key={message.key} className="flex justify-end">
-                    <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-indigo-600 px-4 py-2 text-sm text-white">
+                    <p className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-indigo-600 px-4 py-2 text-sm text-on-accent">
                       {message.text}
                     </p>
                   </div>
@@ -388,6 +406,7 @@ export default function ChatPage() {
             Your question
           </label>
           <textarea
+            ref={promptBox}
             id="prompt"
             name="prompt"
             rows={2}
@@ -416,7 +435,7 @@ export default function ChatPage() {
             <button
               type="submit"
               disabled={!prompt.trim()}
-              className="flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-on-accent hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send className="h-4 w-4" aria-hidden />
               Send

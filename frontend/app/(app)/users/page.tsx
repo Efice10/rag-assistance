@@ -18,7 +18,9 @@ import { ClearanceBadge } from "@/components/Badges";
 import { SsoSettings } from "@/components/SsoSettings";
 import { UserModal } from "@/components/UserModal";
 import { api, errorMessage } from "@/lib/api";
+import { confirmAction, toast } from "@/lib/feedback";
 import { setSession, useSession } from "@/lib/session";
+import { useUrlNumber, useUrlParam } from "@/lib/useUrlParam";
 import { ROLE_LABELS, type DepartmentRow, type ManagedUser, type PageMeta, type User } from "@/lib/types";
 
 const BUTTON =
@@ -31,12 +33,11 @@ export default function UsersPage() {
 
   const [users, setUsers] = useState<ManagedUser[] | null>(null);
   const [meta, setMeta] = useState<PageMeta | null>(null);
-  const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [page, setPage] = useUrlNumber("page", 1);
+  const [search, setSearch] = useUrlParam("q", "");
+  const [searchInput, setSearchInput] = useState(search);
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [modal, setModal] = useState<{ editing: ManagedUser | null } | null>(null);
-  const [confirming, setConfirming] = useState<number | null>(null);
   const [pending, setPending] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -94,22 +95,33 @@ export default function UsersPage() {
   }
 
   async function setActive(user: ManagedUser, active: boolean) {
+    if (!active) {
+      const confirmed = await confirmAction({
+        title: `Deactivate ${user.name}?`,
+        body: "They are signed out everywhere and can no longer sign in. Their account and audit history are kept, and you can reactivate them later.",
+        confirmLabel: "Deactivate",
+        tone: "danger",
+      });
+      if (!confirmed) {
+        return;
+      }
+    }
     setPending(user.id);
-    setError(null);
     try {
       const { data } = await api.put<{ data: ManagedUser }>(
         `/users/${user.id}/${active ? "reactivate" : "deactivate"}`,
       );
       replace(data.data);
+      toast.success(active ? `${user.name} can sign in again.` : `${user.name} was deactivated.`);
     } catch (err) {
-      setError(errorMessage(err, "Could not change the account status."));
+      toast.error(errorMessage(err, "Could not change the account status."));
     } finally {
       setPending(null);
-      setConfirming(null);
     }
   }
 
   async function saved(user: ManagedUser) {
+    toast.success(modal?.editing ? `Saved changes to ${user.name}.` : `${user.name} was added.`);
     setModal(null);
     setReload((count) => count + 1);
     loadDepartments();
@@ -134,7 +146,7 @@ export default function UsersPage() {
           type="button"
           onClick={() => setModal({ editing: null })}
           disabled={departments.length === 0}
-          className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-on-accent hover:bg-indigo-500 disabled:opacity-50"
         >
           <UserPlus className="h-4 w-4" aria-hidden /> Add user
         </button>
@@ -235,22 +247,7 @@ export default function UsersPage() {
                           </span>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
-                          {confirming === user.id ? (
-                            <span className="inline-flex items-center gap-1.5">
-                              <span className="text-xs text-slate-600">Sign them out and block access?</span>
-                              <button
-                                type="button"
-                                onClick={() => setActive(user, false)}
-                                disabled={pending === user.id}
-                                className="rounded-md bg-rose-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-50"
-                              >
-                                Deactivate
-                              </button>
-                              <button type="button" onClick={() => setConfirming(null)} className={BUTTON}>
-                                Cancel
-                              </button>
-                            </span>
-                          ) : (
+                          {
                             <span className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
@@ -262,7 +259,12 @@ export default function UsersPage() {
                               </button>
                               {!isSelf &&
                                 (user.active ? (
-                                  <button type="button" onClick={() => setConfirming(user.id)} className={BUTTON}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActive(user, false)}
+                                    disabled={pending === user.id}
+                                    className={BUTTON}
+                                  >
                                     Deactivate
                                   </button>
                                 ) : (
@@ -276,7 +278,7 @@ export default function UsersPage() {
                                   </button>
                                 ))}
                             </span>
-                          )}
+                          }
                         </td>
                       </tr>
                     );
@@ -294,7 +296,7 @@ export default function UsersPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={meta.current_page <= 1}
                   className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                 >
@@ -302,7 +304,7 @@ export default function UsersPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPage((current) => current + 1)}
+                  onClick={() => setPage(page + 1)}
                   disabled={meta.current_page >= meta.last_page}
                   className="flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                 >
@@ -444,7 +446,7 @@ function DepartmentsPanel({ departments, onChanged }: { departments: DepartmentR
         <button
           type="submit"
           disabled={busy || !newName.trim()}
-          className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-indigo-500 disabled:opacity-50"
         >
           <Plus className="h-4 w-4" aria-hidden /> Add
         </button>

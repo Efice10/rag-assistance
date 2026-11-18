@@ -1,12 +1,68 @@
 @import "tailwindcss";
 
+/* Dark mode is a class on <html> (set by lib/theme.ts), not only the media query. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+@theme {
+  /* Text on solid accent fills (indigo, rose, amber buttons): white in both themes. */
+  --color-on-accent: #ffffff;
+}
+
+/*
+ * Dark theme as a remapped palette. Components use one set of classes
+ * (bg-white, text-slate-900, bg-rose-50 ...); in dark mode these tokens point
+ * at dark-theme steps chosen for it, not an automatic inversion:
+ * - surfaces: white is the card, slate-50 the page canvas, slate-100 hover/muted;
+ * - slate text steps run light, so text-slate-900 stays the strongest ink;
+ * - tinted 50/100/200 fills become deep tints, and the 700-900 text steps of
+ *   each hue become light, so badges and alerts keep their contrast.
+ * Solid accent fills (indigo-600, rose-600, amber-600, emerald-600) are unchanged.
+ */
+:root.dark {
+  --color-white: #0f172a;
+  --color-slate-50: #020617;
+  --color-slate-100: #1e293b;
+  --color-slate-200: #263345;
+  --color-slate-300: #334155;
+  --color-slate-400: #64748b;
+  --color-slate-500: #94a3b8;
+  --color-slate-600: #b7c3d2;
+  --color-slate-700: #d5dde8;
+  --color-slate-800: #e7ecf3;
+  --color-slate-900: #f8fafc;
+
+  --color-indigo-50: #1e1b4b;
+  --color-indigo-100: #2b2770;
+  --color-indigo-200: #3730a3;
+  --color-indigo-700: #a5b4fc;
+  --color-indigo-800: #c7d2fe;
+
+  --color-rose-50: #3f0d18;
+  --color-rose-100: #5c1325;
+  --color-rose-700: #fda4af;
+  --color-rose-800: #fecdd3;
+
+  --color-emerald-50: #052e24;
+  --color-emerald-100: #064e3b;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+
+  --color-amber-50: #3a1a05;
+  --color-amber-100: #5a2a0a;
+  --color-amber-800: #fde68a;
+  --color-amber-900: #fef3c7;
+
+  --color-sky-50: #082f49;
+  --color-sky-800: #bae6fd;
+}
+
 body {
-  background: #f8fafc; /* slate-50 */
-  color: #0f172a; /* slate-900 */
+  background: var(--color-slate-50);
+  color: var(--color-slate-900);
   font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
 }

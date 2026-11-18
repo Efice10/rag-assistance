@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, RefreshCw, ShieldAlert, Trash2 } from "lucide-re
 import { useCallback, useEffect, useState } from "react";
 import { StatusBadge } from "@/components/Badges";
 import { api, errorMessage } from "@/lib/api";
+import { toast } from "@/lib/feedback";
 import { useSession } from "@/lib/session";
 import type { DocumentItem } from "@/lib/types";
 
@@ -31,7 +32,6 @@ export default function ProcessingPage() {
   const isAdmin = session?.user.role === "admin";
   const [data, setData] = useState<Processing | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -61,14 +61,12 @@ export default function ProcessingPage() {
 
   async function run(key: string, request: () => Promise<unknown>, done: string) {
     setBusy(key);
-    setError(null);
-    setNotice(null);
     try {
       await request();
-      setNotice(done);
+      toast.success(done);
       load();
     } catch (err) {
-      setError(errorMessage(err, "That action failed."));
+      toast.error(errorMessage(err, "That action failed."));
     } finally {
       setBusy(null);
     }
@@ -92,11 +90,6 @@ export default function ProcessingPage() {
       {error && (
         <p role="alert" className="mb-4 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {error}
-        </p>
-      )}
-      {notice && (
-        <p role="status" className="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {notice}
         </p>
       )}
 

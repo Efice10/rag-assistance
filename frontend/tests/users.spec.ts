@@ -127,7 +127,7 @@ test("an admin reads analytics, reindexes a failed document and exports the audi
   await page.getByRole("link", { name: "Processing" }).click();
   const row = page.getByTestId("processing-document").filter({ hasText: "Scanned Contract" });
   await row.getByRole("button", { name: "Reindex" }).click();
-  await expect(page.getByRole("status")).toContainText("queued again");
+  await expect(page.getByTestId("toasts")).toContainText("queued again");
   expect(reindexed).toEqual(["POST"]);
 
   await page.getByRole("link", { name: "Audit logs" }).click();
@@ -173,8 +173,10 @@ test("an admin adds a user and deactivates another", async ({ page }) => {
   // Deactivate the manager, through the confirmation step.
   const managerRow = page.getByTestId("user-row").filter({ hasText: "Mark Manager" });
   await managerRow.getByRole("button", { name: "Deactivate" }).click();
-  await expect(managerRow).toContainText("Sign them out and block access?");
-  await managerRow.getByRole("button", { name: "Deactivate" }).click();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toContainText("Deactivate Mark Manager?");
+  await confirm.getByRole("button", { name: "Deactivate" }).click();
+  await expect(page.getByTestId("toasts")).toContainText("Mark Manager was deactivated.");
   await expect(managerRow.getByTestId("user-status")).toHaveText("Deactivated");
   await expect(managerRow.getByRole("button", { name: "Reactivate" })).toBeVisible();
 });

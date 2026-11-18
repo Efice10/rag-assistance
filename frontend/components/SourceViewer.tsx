@@ -51,7 +51,7 @@ export function SourceViewer({ source, onClose }: { source: Source; onClose: () 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/40" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/40" onClick={onClose}>
       <aside
         role="dialog"
         aria-modal="true"
