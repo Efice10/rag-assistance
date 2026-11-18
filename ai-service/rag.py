@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, Literal
 
 from pydantic import BaseModel, Field
 
@@ -22,14 +22,49 @@ Rules you must follow without exception:
 5. Be concise and factual."""
 
 
+class HistoryTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+
+
 class QueryRequest(BaseModel):
-    """Scope fields come from Laravel, which derives them from the authenticated user."""
+    """Scope fields come from Laravel, which derives them from the authenticated user.
+
+    `history` holds earlier turns of the user's own conversation (Laravel has
+    already removed answers the user may no longer see). It only shapes the
+    wording of the answer; retrieval is still filtered by the scope fields.
+    """
 
     prompt: str = Field(min_length=1, max_length=4000)
     organization_id: int
     department_id: int
     clearance_level: int = Field(ge=1, le=4)
     is_admin: bool = False
+    history: list[HistoryTurn] = Field(default_factory=list, max_length=12)
+
+
+MAX_HISTORY_TURNS = 6
+MAX_HISTORY_CHARS = 4000
+
+
+def trimmed_history(request: QueryRequest) -> list[HistoryTurn]:
+    """The last few turns, newest kept first when the character budget runs out."""
+    kept: list[HistoryTurn] = []
+    budget = MAX_HISTORY_CHARS
+    for turn in reversed(request.history[-MAX_HISTORY_TURNS:]):
+        if len(turn.content) > budget:
+            break
+        budget -= len(turn.content)
+        kept.append(turn)
+    return list(reversed(kept))
+
+
+def retrieval_text(request: QueryRequest) -> str:
+    """What gets embedded for the search: the question, plus the previous user
+    question when there is one, so a follow-up such as "what about under
+    RM 500?" still finds the right policy. Assistant turns are never embedded."""
+    previous = next((turn.content for turn in reversed(request.history) if turn.role == "user"), None)
+    return f"{previous}\n{request.prompt}" if previous else request.prompt
 
 
 @dataclass(frozen=True)
@@ -67,7 +102,7 @@ def build_search_query(request: QueryRequest, embedding: list[float], limit: int
 
 
 def retrieve(request: QueryRequest) -> list[Chunk]:
-    embedding = embed_query(request.prompt)
+    embedding = embed_query(retrieval_text(request))
     sql, params = build_search_query(request, embedding, settings.top_k)
 
     with get_connection() as conn, conn.cursor() as cur:
@@ -77,12 +112,14 @@ def retrieve(request: QueryRequest) -> list[Chunk]:
     return [chunk for chunk in chunks if chunk.similarity >= settings.min_similarity]
 
 
-def build_messages(prompt: str, chunks: list[Chunk]) -> list[dict[str, str]]:
+def build_messages(prompt: str, chunks: list[Chunk], history: list[HistoryTurn] | None = None) -> list[dict[str, str]]:
     context = "\n\n".join(
         f"[{chunk.document_title}, Page {chunk.page_number}]\n{chunk.content}" for chunk in chunks
     )
+    earlier = [{"role": turn.role, "content": turn.content} for turn in history or []]
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *earlier,
         {"role": "user", "content": f"Context excerpts:\n\n{context}\n\nQuestion: {prompt}"},
     ]
 
@@ -124,7 +161,7 @@ def answer_stream(request: QueryRequest) -> Iterator[str]:
             return
 
         answer = ""
-        for text in stream_chat(build_messages(request.prompt, chunks)):
+        for text in stream_chat(build_messages(request.prompt, chunks, trimmed_history(request))):
             answer += text
             yield sse("token", {"text": text})
 

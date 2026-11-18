@@ -41,11 +41,14 @@ const sseReply =
   'event: token\ndata: {"text":"Purchases above RM 10,000 need three quotations "}\n\n' +
   'event: token\ndata: {"text":"[Procurement SOP, Page 2]."}\n\n' +
   'event: sources\ndata: {"sources":[{"document_id":10,"document_title":"Procurement SOP","page_number":2}]}\n\n' +
-  "event: done\ndata: {}\n\n";
+  "event: done\ndata: {}\n\n" +
+  'event: saved\ndata: {"conversation_id":5,"title":"How many quotations do I need?","message_id":42}\n\n';
 
 async function stubApi(page: Page) {
   const documents = [existingDocument];
   const chatRequests: unknown[] = [];
+  const feedback: unknown[] = [];
+  const conversations: { id: number; title: string; last_message_at: string }[] = [];
 
   await page.route("**/api/login", async (route) => {
     const body = route.request().postDataJSON() as { email: string; password: string };
@@ -74,10 +77,23 @@ async function stubApi(page: Page) {
   });
   await page.route("**/api/chat", async (route) => {
     chatRequests.push(route.request().postDataJSON());
+    conversations.splice(0, conversations.length, {
+      id: 5,
+      title: "How many quotations do I need?",
+      last_message_at: "2026-11-18T09:00:00+00:00",
+    });
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: sseReply });
   });
+  await page.route("**/api/conversations", (route) => route.fulfill({ json: { data: conversations } }));
+  await page.route("**/api/messages/42/feedback", async (route) => {
+    feedback.push(route.request().postDataJSON());
+    await route.fulfill({ status: 201, json: { data: route.request().postDataJSON() } });
+  });
+  await page.route("**/api/documents/10/download", (route) =>
+    route.fulfill({ status: 200, contentType: "application/pdf", body: samplePdf() }),
+  );
 
-  return { chatRequests };
+  return { chatRequests, feedback };
 }
 
 async function signIn(page: Page) {
@@ -170,6 +186,25 @@ test.describe("compliance assistant", () => {
       await expect(reply.getByTestId("citation")).toHaveText("Procurement SOP • Page 2");
       // The browser sends only the prompt; scope is decided on the server.
       expect(stub.chatRequests).toEqual([{ prompt: "How many quotations do I need?" }]);
+
+      // The turn is saved: it appears in the history list, and follow-ups carry the conversation id.
+      await expect(page.getByTestId("conversation-list").first()).toContainText("How many quotations do I need?");
+      await page.getByLabel("Your question").fill("And for smaller purchases?");
+      await page.getByRole("button", { name: "Send" }).click();
+      await expect(page.getByTestId("assistant-message")).toHaveCount(2);
+      expect(stub.chatRequests[1]).toEqual({ prompt: "And for smaller purchases?", conversation_id: 5 });
+
+      // Rating an answer.
+      await reply.getByRole("button", { name: "Helpful" }).first().click();
+      await expect.poll(() => stub.feedback).toEqual([{ helpful: true, comment: null }]);
+
+      // The citation opens the document at the cited page, inside the app.
+      await reply.getByTestId("citation").click();
+      const viewer = page.getByTestId("source-viewer");
+      await expect(viewer).toContainText("Cited page 2");
+      await expect(viewer.locator("iframe")).toHaveAttribute("src", /#page=2$/);
+      await viewer.getByRole("button", { name: "Close document" }).click();
+      await expect(viewer).toHaveCount(0);
     } else {
       await expect(reply.getByTestId("citation").first()).toContainText("Travel Policy");
     }

@@ -42,6 +42,34 @@ export interface Source {
   page_number: number;
 }
 
+export interface ConversationSummary {
+  id: number;
+  title: string;
+  last_message_at: string | null;
+}
+
+export interface Feedback {
+  helpful: boolean;
+  comment: string | null;
+}
+
+export interface StoredMessage {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  sources: Source[];
+  error: string | null;
+  withheld: boolean;
+  created_at: string | null;
+  feedback: Feedback | null;
+}
+
+export interface SavedTurn {
+  conversation_id: number;
+  title: string;
+  message_id: number;
+}
+
 export interface AuditLogItem {
   id: number;
   action: string;

@@ -1,18 +1,26 @@
 import { API_URL } from "./api";
 import { getSession, setSession } from "./session";
-import type { Source } from "./types";
+import type { SavedTurn, Source } from "./types";
 
 export interface ChatHandlers {
   onToken: (text: string) => void;
   onSources: (sources: Source[]) => void;
   onError: (message: string) => void;
+  /** Laravel's own event after the relayed stream: where the turn was stored. */
+  onSaved?: (saved: SavedTurn) => void;
 }
 
 /**
  * Send a prompt to Laravel's /chat endpoint and read the Server-Sent Events
- * reply. Only the prompt is sent: the server decides what the user may see.
+ * reply. Only the prompt (and the user's own conversation id, for a
+ * follow-up) is sent: the server decides what the user may see.
  */
-export async function streamChat(prompt: string, signal: AbortSignal, handlers: ChatHandlers): Promise<void> {
+export async function streamChat(
+  prompt: string,
+  signal: AbortSignal,
+  handlers: ChatHandlers,
+  conversationId: number | null = null,
+): Promise<void> {
   const session = getSession();
 
   const response = await fetch(`${API_URL}/chat`, {
@@ -22,7 +30,7 @@ export async function streamChat(prompt: string, signal: AbortSignal, handlers: 
       Accept: "text/event-stream",
       Authorization: `Bearer ${session?.token ?? ""}`,
     },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify(conversationId ? { prompt, conversation_id: conversationId } : { prompt }),
     signal,
   });
 
@@ -75,7 +83,7 @@ function dispatch(rawEvent: string, handlers: ChatHandlers): void {
     }
   }
 
-  let payload: { text?: string; sources?: Source[]; message?: string } = {};
+  let payload: { text?: string; sources?: Source[]; message?: string } & Partial<SavedTurn> = {};
   try {
     payload = JSON.parse(dataLines.join("\n") || "{}");
   } catch {
@@ -88,5 +96,11 @@ function dispatch(rawEvent: string, handlers: ChatHandlers): void {
     handlers.onSources(payload.sources ?? []);
   } else if (event === "error") {
     handlers.onError(payload.message ?? "The assistant could not complete this request.");
+  } else if (event === "saved" && payload.conversation_id && payload.message_id) {
+    handlers.onSaved?.({
+      conversation_id: payload.conversation_id,
+      title: payload.title ?? "",
+      message_id: payload.message_id,
+    });
   }
 }

@@ -3,8 +3,10 @@
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\MessageFeedbackController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +34,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // 20 prompts per minute per user, counted in the cache store (Redis locally).
     Route::post('/chat', ChatController::class)->middleware('throttle:20,1');
+
+    // The user's own chat history and answer ratings.
+    Route::get('/conversations', [ConversationController::class, 'index']);
+    Route::get('/conversations/{conversation}', [ConversationController::class, 'show'])->whereNumber('conversation');
+    Route::delete('/conversations/{conversation}', [ConversationController::class, 'destroy'])->whereNumber('conversation');
+    Route::post('/messages/{message}/feedback', [MessageFeedbackController::class, 'store'])->whereNumber('message');
 
     Route::get('/audit-logs', [AuditLogController::class, 'index']);
 });

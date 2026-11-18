@@ -31,13 +31,14 @@ class AiServiceClient
      * Start a retrieval query and return the raw Server-Sent Events body.
      *
      * @param  array{organization_id: int, department_id: int, clearance_level: int, is_admin: bool}  $scope
+     * @param  list<array{role: string, content: string}>  $history  earlier turns of the user's own conversation
      */
-    public function streamQuery(string $prompt, array $scope): StreamInterface
+    public function streamQuery(string $prompt, array $scope, array $history = []): StreamInterface
     {
         return $this->request()
             ->timeout((int) config('services.ai.query_timeout'))
             ->withOptions(['stream' => true])
-            ->post('/query', ['prompt' => $prompt, ...$scope])
+            ->post('/query', ['prompt' => $prompt, ...$scope, 'history' => $history])
             ->throw()
             ->toPsrResponse()
             ->getBody();
