@@ -74,7 +74,7 @@ it('rejects uploads outside the uploader\'s scope', function (string $field, cal
     'a clearance above their own' => ['clearance_level', fn () => 4],
     'another department' => ['department_id', fn (array $t) => $t['hr']->id],
     'another organization\'s department' => ['department_id', fn (array $t) => $t['operations']->id],
-    'a file that is not PDF or DOCX' => ['file', fn () => UploadedFile::fake()->create('notes.txt', 10, 'text/plain')],
+    'a file in an unsupported format' => ['file', fn () => UploadedFile::fake()->create('macro.exe', 10, 'application/x-msdownload')],
 ]);
 
 it('sends the AI service the document scope and the internal secret, then marks it indexed', function () {

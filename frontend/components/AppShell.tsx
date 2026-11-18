@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Loader2, LogOut, Menu, MessageSquare, ScrollText, ShieldCheck, Users, X } from "lucide-react";
+import { Activity, BarChart3, FileText, Loader2, LogOut, Menu, MessageSquare, ScrollText, ShieldCheck, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -13,6 +13,8 @@ const NAV = [
   { href: "/chat", label: "Chat", icon: MessageSquare, adminOnly: false },
   { href: "/documents", label: "Documents", icon: FileText, adminOnly: false },
   { href: "/users", label: "Users", icon: Users, adminOnly: true },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, adminOnly: true },
+  { href: "/processing", label: "Processing", icon: Activity, adminOnly: true },
   { href: "/audit-logs", label: "Audit logs", icon: ScrollText, adminOnly: true },
 ];
 

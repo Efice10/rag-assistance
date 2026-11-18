@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
 import { CLEARANCE_LABELS, type DocumentStatus } from "@/lib/types";
 
 const CLEARANCE_STYLES: Record<number, string> = {
@@ -41,6 +41,11 @@ const STATUS: Record<DocumentStatus, { label: string; style: string; icon: React
     label: "Failed",
     style: "bg-rose-50 text-rose-800 ring-rose-600/20",
     icon: <AlertCircle className="h-3.5 w-3.5" aria-hidden />,
+  },
+  flagged: {
+    label: "Held for review",
+    style: "bg-amber-50 text-amber-900 ring-amber-600/30",
+    icon: <ShieldAlert className="h-3.5 w-3.5" aria-hidden />,
   },
 };
 

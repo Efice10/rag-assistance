@@ -26,6 +26,8 @@ class AuditLog extends Model
 
     public const ACTION_DEPARTMENT_RENAMED = 'department.renamed';
 
+    public const ACTION_DOCUMENT_APPROVED = 'document.approved';
+
     protected $fillable = [
         'organization_id',
         'user_id',

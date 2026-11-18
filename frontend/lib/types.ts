@@ -1,6 +1,6 @@
 export type Role = "admin" | "manager" | "staff";
 
-export type DocumentStatus = "pending" | "processing" | "indexed" | "failed";
+export type DocumentStatus = "pending" | "processing" | "indexed" | "failed" | "flagged";
 
 export interface NamedRef {
   id: number;
@@ -31,10 +31,17 @@ export interface DocumentItem {
   clearance_label: string;
   status: DocumentStatus;
   error_message: string | null;
+  version: number;
+  superseded: boolean;
+  pii_redactions: number;
+  approved: boolean;
   department: NamedRef | null;
   uploaded_by: NamedRef | null;
   created_at: string;
 }
+
+/** Upload formats; the backend's StoreDocumentRequest accepts the same list. */
+export const ACCEPTED_EXTENSIONS = ["pdf", "docx", "xlsx", "pptx", "txt", "md"] as const;
 
 export interface Source {
   document_id: number;

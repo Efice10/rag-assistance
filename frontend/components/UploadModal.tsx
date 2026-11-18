@@ -3,12 +3,14 @@
 import { Loader2, UploadCloud, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
-import { CLEARANCE_LABELS, type DocumentItem, type NamedRef, type User } from "@/lib/types";
+import { ACCEPTED_EXTENSIONS, CLEARANCE_LABELS, type DocumentItem, type NamedRef, type User } from "@/lib/types";
 
 const MAX_BYTES = 20 * 1024 * 1024;
 
+const EXTENSION = new RegExp(`\\.(${ACCEPTED_EXTENSIONS.join("|")})$`, "i");
+
 function isAccepted(file: File): boolean {
-  return /\.(pdf|docx)$/i.test(file.name);
+  return EXTENSION.test(file.name);
 }
 
 export function UploadModal({
@@ -64,7 +66,7 @@ export function UploadModal({
       return;
     }
     if (!isAccepted(candidate)) {
-      setError("Only PDF and DOCX files are accepted.");
+      setError("Accepted formats: PDF, DOCX, XLSX, PPTX, TXT and MD.");
       return;
     }
     if (candidate.size > MAX_BYTES) {
@@ -74,7 +76,7 @@ export function UploadModal({
     setError(null);
     setFile(candidate);
     if (!title) {
-      setTitle(candidate.name.replace(/\.(pdf|docx)$/i, "").replace(/[-_]+/g, " "));
+      setTitle(candidate.name.replace(EXTENSION, "").replace(/[-_]+/g, " "));
     }
   }
 
@@ -145,7 +147,7 @@ export function UploadModal({
           >
             <UploadCloud className="mx-auto h-8 w-8 text-slate-400" aria-hidden />
             <p className="mt-2 text-sm text-slate-700">
-              {file ? <span className="font-medium">{file.name}</span> : "Drag a PDF or DOCX here"}
+              {file ? <span className="font-medium">{file.name}</span> : "Drag a PDF, Word, Excel, PowerPoint or text file here"}
             </p>
             <button
               type="button"
@@ -158,12 +160,14 @@ export function UploadModal({
               ref={fileInput}
               type="file"
               name="file"
-              accept=".pdf,.docx"
+              accept={ACCEPTED_EXTENSIONS.map((extension) => `.${extension}`).join(",")}
               className="sr-only"
               aria-label="Document file"
               onChange={(event) => chooseFile(event.target.files?.[0])}
             />
-            <p className="mt-1 text-xs text-slate-500">Up to 20 MB</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Up to 20 MB. Re-uploading the same title creates a new version that replaces the old one once indexed.
+            </p>
           </div>
 
           <label className="block text-sm font-medium text-slate-700">

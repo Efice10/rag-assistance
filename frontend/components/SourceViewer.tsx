@@ -100,7 +100,7 @@ export function SourceViewer({ source, onClose }: { source: Source; onClose: () 
             />
           ) : (
             <div className="m-auto max-w-sm p-10 text-center text-sm text-slate-600">
-              Word documents have no fixed pages, so they cannot be previewed here. Use Download to open it.
+              Only PDFs can be previewed at a page. Use Download to open this document.
             </div>
           )}
         </div>

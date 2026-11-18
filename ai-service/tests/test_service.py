@@ -135,8 +135,8 @@ class TestExtraction:
         assert extract_pages(path) == [(1, "Leave requests need manager approval.")]
 
     def test_unsupported_files_are_rejected(self, tmp_path):
-        path = tmp_path / "notes.txt"
-        path.write_text("hello")
+        path = tmp_path / "macro.exe"
+        path.write_bytes(b"MZ")
 
         with pytest.raises(IngestError):
             extract_pages(path)

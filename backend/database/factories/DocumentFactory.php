@@ -26,6 +26,7 @@ class DocumentFactory extends Factory
             'mime_type' => 'application/pdf',
             'clearance_level' => 1,
             'status' => Document::STATUS_INDEXED,
+            'version' => 1,
         ];
     }
 

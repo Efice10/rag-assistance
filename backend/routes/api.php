@@ -7,6 +7,8 @@ use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\MessageFeedbackController;
+use App\Http\Controllers\MetricsController;
+use App\Http\Controllers\ProcessingController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +33,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/documents', [DocumentController::class, 'store']);
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])
         ->whereNumber('document');
+    Route::post('/documents/{document}/reindex', [DocumentController::class, 'reindex'])->whereNumber('document');
+    Route::post('/documents/{document}/approve', [DocumentController::class, 'approve'])->whereNumber('document');
 
     // 20 prompts per minute per user, counted in the cache store (Redis locally).
     Route::post('/chat', ChatController::class)->middleware('throttle:20,1');
@@ -42,4 +46,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/messages/{message}/feedback', [MessageFeedbackController::class, 'store'])->whereNumber('message');
 
     Route::get('/audit-logs', [AuditLogController::class, 'index']);
+    Route::get('/audit-logs/export', [AuditLogController::class, 'export']);
+
+    // Admin views.
+    Route::get('/admin/metrics', MetricsController::class);
+    Route::get('/admin/processing', [ProcessingController::class, 'index']);
+    Route::post('/admin/failed-jobs/{failedJob}/retry', [ProcessingController::class, 'retry'])->whereNumber('failedJob');
+    Route::delete('/admin/failed-jobs/{failedJob}', [ProcessingController::class, 'forget'])->whereNumber('failedJob');
 });

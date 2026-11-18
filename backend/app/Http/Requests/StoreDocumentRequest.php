@@ -7,9 +7,30 @@ use Illuminate\Validation\Rule;
 
 class StoreDocumentRequest extends FormRequest
 {
+    /** Stored mime type per accepted extension. */
     public const MIME_TYPES = [
         'pdf' => 'application/pdf',
         'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'txt' => 'text/plain',
+        'md' => 'text/markdown',
+    ];
+
+    /**
+     * What fileinfo may report for those files. Office formats are zip
+     * containers, and Markdown is usually detected as plain text.
+     */
+    private const DETECTED_TYPES = [
+        'application/pdf',
+        'application/zip',
+        'application/octet-stream',
+        'text/plain',
+        'text/markdown',
+        'text/x-markdown',
+        self::MIME_TYPES['docx'],
+        self::MIME_TYPES['xlsx'],
+        self::MIME_TYPES['pptx'],
     ];
 
     public function authorize(): bool
@@ -39,9 +60,8 @@ class StoreDocumentRequest extends FormRequest
                 'required',
                 'file',
                 'max:20480',
-                'extensions:pdf,docx',
-                // DOCX is a zip container, which is how fileinfo sometimes reports it.
-                'mimetypes:application/pdf,application/zip,'.self::MIME_TYPES['docx'],
+                'extensions:'.implode(',', array_keys(self::MIME_TYPES)),
+                'mimetypes:'.implode(',', self::DETECTED_TYPES),
             ],
         ];
     }
@@ -51,8 +71,8 @@ class StoreDocumentRequest extends FormRequest
         return [
             'department_id.exists' => 'You cannot upload documents to that department.',
             'clearance_level.max' => 'You cannot classify a document above your own clearance level.',
-            'file.extensions' => 'Only PDF and DOCX files are accepted.',
-            'file.mimetypes' => 'Only PDF and DOCX files are accepted.',
+            'file.extensions' => 'Accepted formats: PDF, DOCX, XLSX, PPTX, TXT and MD.',
+            'file.mimetypes' => 'Accepted formats: PDF, DOCX, XLSX, PPTX, TXT and MD.',
         ];
     }
 }

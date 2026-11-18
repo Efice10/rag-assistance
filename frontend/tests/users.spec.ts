@@ -69,6 +69,70 @@ async function stubApi(page: Page) {
   return { created };
 }
 
+test("an admin reads analytics, reindexes a failed document and exports the audit log", async ({ page }) => {
+  await stubApi(page);
+  const reindexed: string[] = [];
+  const failedDoc = {
+    id: 30, title: "Scanned Contract", mime_type: "application/pdf", clearance_level: 2, clearance_label: "Internal",
+    status: "failed", error_message: "No extractable text was found.", version: 1, superseded: false,
+    pii_redactions: 0, approved: false, department: { id: 1, name: "Procurement" }, uploaded_by: null,
+    created_at: "2026-11-18T08:00:00+00:00",
+  };
+
+  await page.route("**/api/admin/metrics?*", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          days: 30,
+          totals: { queries: 42, distinct_users: 5, failed_queries: 1, no_answer: 6, no_answer_rate: 0.15, ratings: 4, helpful_rate: 0.75 },
+          queries_per_day: [{ date: "2026-11-17", count: 10 }, { date: "2026-11-18", count: 32 }],
+          top_documents: [{ id: 10, title: "Procurement SOP", citations: 20 }],
+          documents_by_status: { indexed: 3, failed: 1 },
+          documents_by_clearance: [1, 2, 3, 4].map((level) => ({ level, label: "x", count: level })),
+          recent_negative_feedback: [
+            { id: 1, user: "Sam Staff", comment: "Wrong limit", question: "What is the limit?", answer: "RM 5,000", rated_at: null },
+          ],
+        },
+      },
+    }),
+  );
+  await page.route("**/api/admin/processing", (route) =>
+    route.fulfill({ json: { data: { failed_documents: [failedDoc], stuck_documents: [], failed_jobs: [], stuck_after_minutes: 15 } } }),
+  );
+  await page.route("**/api/documents/30/reindex", async (route) => {
+    reindexed.push(route.request().method());
+    await route.fulfill({ json: { data: { ...failedDoc, status: "pending" } } });
+  });
+  await page.route("**/api/audit-logs?*", (route) =>
+    route.fulfill({ json: { data: [], meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 } } }),
+  );
+  await page.route("**/api/audit-logs/export*", (route) =>
+    route.fulfill({ status: 200, contentType: "text/csv", body: "id,time\n1,2026-11-18\n" }),
+  );
+
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill("admin@acme.test");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/chat$/);
+
+  await page.getByRole("link", { name: "Analytics" }).click();
+  await expect(page.getByTestId("metric-tiles")).toContainText("42");
+  await expect(page.getByTestId("metric-tiles")).toContainText("75%");
+  await expect(page.getByTestId("negative-feedback")).toContainText("Wrong limit");
+
+  await page.getByRole("link", { name: "Processing" }).click();
+  const row = page.getByTestId("processing-document").filter({ hasText: "Scanned Contract" });
+  await row.getByRole("button", { name: "Reindex" }).click();
+  await expect(page.getByRole("status")).toContainText("queued again");
+  expect(reindexed).toEqual(["POST"]);
+
+  await page.getByRole("link", { name: "Audit logs" }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export CSV" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^audit-log-.*\.csv$/);
+});
+
 test("an admin adds a user and deactivates another", async ({ page }) => {
   const stub = await stubApi(page);
 

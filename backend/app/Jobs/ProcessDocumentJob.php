@@ -27,8 +27,12 @@ class ProcessDocumentJob implements ShouldQueue
 
         $document->update(['status' => Document::STATUS_PROCESSING, 'error_message' => null]);
 
+        // Earlier versions lose their chunks only when this one indexes, in
+        // the same transaction, so a failed upload never removes an answer.
+        $older = $document->olderVersions()->pluck('id')->all();
+
         try {
-            $ai->ingest([
+            $result = $ai->ingest([
                 'document_id' => $document->id,
                 'organization_id' => $document->organization_id,
                 'department_id' => $document->department_id,
@@ -37,6 +41,8 @@ class ProcessDocumentJob implements ShouldQueue
                 'mime_type' => $document->mime_type,
                 // Absolute path on this machine: the AI service reads the file directly.
                 'file_path' => Storage::disk()->path($document->file_path),
+                'supersedes_document_ids' => $older,
+                'allow_flagged' => $document->approved_at !== null,
             ]);
         } catch (Throwable $e) {
             report($e);
@@ -45,12 +51,31 @@ class ProcessDocumentJob implements ShouldQueue
             return;
         }
 
-        // The AI service marks the document indexed itself; this covers the
-        // case where it answered successfully but could not write the status.
+        // The AI service writes the outcome itself; this covers the case where
+        // it answered but could not write the row.
         $document->refresh();
 
+        if (($result['status'] ?? null) === Document::STATUS_FLAGGED) {
+            if ($document->status !== Document::STATUS_FLAGGED) {
+                $document->update([
+                    'status' => Document::STATUS_FLAGGED,
+                    'error_message' => Str::limit('Held for review: '.implode('; ', $result['flag_reasons'] ?? []), 500),
+                ]);
+            }
+
+            return;
+        }
+
         if ($document->status === Document::STATUS_PROCESSING) {
-            $document->update(['status' => Document::STATUS_INDEXED]);
+            $document->forceFill([
+                'status' => Document::STATUS_INDEXED,
+                'pii_redactions' => (int) ($result['pii_redactions'] ?? 0),
+            ])->save();
+        }
+
+        if ($older !== []) {
+            Document::query()->whereKey($older)->whereNull('superseded_at')
+                ->update(['superseded_at' => now(), 'superseded_by' => $document->id]);
         }
     }
 

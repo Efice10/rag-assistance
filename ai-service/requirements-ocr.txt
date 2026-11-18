@@ -1,0 +1,4 @@
+# Optional: OCR for scanned PDFs (see ocr.py).
+# Also needs the Tesseract program:  winget install UB-Mannheim.TesseractOCR
+pytesseract
+pypdfium2

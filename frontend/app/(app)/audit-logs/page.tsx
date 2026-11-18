@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Loader2, Search, ShieldAlert } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, Search, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, saveBlob } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { AuditLogItem, PageMeta } from "@/lib/types";
 
@@ -14,6 +14,7 @@ const ADMIN_ACTIONS: Record<string, string> = {
   "user.reactivated": "User reactivated",
   "department.created": "Department created",
   "department.renamed": "Department renamed",
+  "document.approved": "Document approved",
 };
 
 export default function AuditLogsPage() {
@@ -25,6 +26,23 @@ export default function AuditLogsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const response = await api.get("/audit-logs/export", {
+        params: { q: search || undefined },
+        responseType: "blob",
+        headers: { Accept: "text/csv" },
+      });
+      saveBlob(response.data as Blob, `audit-log-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (err) {
+      setError(errorMessage(err, "Could not export the audit log."));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     if (!isAdmin) {
@@ -101,6 +119,16 @@ export default function AuditLogsPage() {
             className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
           >
             Search
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={exporting}
+            title={search ? `Export records matching "${search}"` : "Export every record"}
+            className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
+            Export CSV
           </button>
         </form>
       </div>

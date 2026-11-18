@@ -36,14 +36,14 @@ def health() -> dict:
 @app.post("/ingest", dependencies=[Depends(require_internal_secret)])
 def ingest(request: IngestRequest) -> dict:
     try:
-        chunks = ingest_document(request)
+        result = ingest_document(request)
     except IngestError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
         print(f"[ingest] document {request.document_id} failed: {error!r}", flush=True)
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {error}") from error
 
-    return {"status": "indexed", "document_id": request.document_id, "chunks": chunks}
+    return {"document_id": request.document_id, **result.model_dump()}
 
 
 @app.post("/query", dependencies=[Depends(require_internal_secret)])

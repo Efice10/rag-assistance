@@ -40,16 +40,30 @@ export function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-/** Download a document through the API, which re-checks access on every request. */
-export async function downloadDocument(id: number, title: string): Promise<void> {
-  const response = await api.get(`/documents/${id}/download`, { responseType: "blob" });
-  const extension = String(response.headers["content-type"] ?? "").includes("pdf") ? "pdf" : "docx";
-  const url = URL.createObjectURL(response.data as Blob);
+function extensionFor(contentType: string): string {
+  if (contentType.includes("pdf")) return "pdf";
+  if (contentType.includes("spreadsheet")) return "xlsx";
+  if (contentType.includes("presentation")) return "pptx";
+  if (contentType.includes("wordprocessing")) return "docx";
+  if (contentType.includes("markdown")) return "md";
+  if (contentType.includes("text/plain")) return "txt";
+  return "bin";
+}
+
+/** Save a blob response as a file. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${title}.${extension}`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Download a document through the API, which re-checks access on every request. */
+export async function downloadDocument(id: number, title: string): Promise<void> {
+  const response = await api.get(`/documents/${id}/download`, { responseType: "blob" });
+  saveBlob(response.data as Blob, `${title}.${extensionFor(String(response.headers["content-type"] ?? ""))}`);
 }

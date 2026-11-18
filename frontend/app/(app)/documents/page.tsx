@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileText, Loader2, Upload } from "lucide-react";
+import { Download, FileText, Loader2, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ClearanceBadge, StatusBadge } from "@/components/Badges";
 import { UploadModal } from "@/components/UploadModal";
@@ -16,16 +16,20 @@ export default function DocumentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [actingId, setActingId] = useState<number | null>(null);
+  const [showOlder, setShowOlder] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get<{ data: DocumentItem[] }>("/documents");
+      const { data } = await api.get<{ data: DocumentItem[] }>("/documents", {
+        params: showOlder ? { include_superseded: 1 } : undefined,
+      });
       setDocuments(data.data);
       setError(null);
     } catch (err) {
       setError(errorMessage(err, "Could not load documents."));
     }
-  }, []);
+  }, [showOlder]);
 
   useEffect(() => {
     // Deferred so the fetch (and its state updates) runs after the effect.
@@ -43,6 +47,22 @@ export default function DocumentsPage() {
     const timer = window.setInterval(load, POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [inProgress, load]);
+
+  async function act(doc: DocumentItem, action: "reindex" | "approve") {
+    if (action === "approve" && !window.confirm(`Approve "${doc.title}" for indexing? This is recorded in the audit log.`)) {
+      return;
+    }
+    setActingId(doc.id);
+    setError(null);
+    try {
+      const { data } = await api.post<{ data: DocumentItem }>(`/documents/${doc.id}/${action}`);
+      setDocuments((current) => current?.map((item) => (item.id === doc.id ? data.data : item)) ?? null);
+    } catch (err) {
+      setError(errorMessage(err, action === "approve" ? "Could not approve the document." : "Could not reindex the document."));
+    } finally {
+      setActingId(null);
+    }
+  }
 
   async function download(doc: DocumentItem) {
     setDownloadingId(doc.id);
@@ -66,6 +86,15 @@ export default function DocumentsPage() {
             Policies and manuals you are cleared to see. Indexed documents can be queried in chat.
           </p>
         </div>
+        <label className="ml-auto flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={showOlder}
+            onChange={(event) => setShowOlder(event.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          Show older versions
+        </label>
         {user?.can_upload && (
           <button
             type="button"
@@ -95,7 +124,7 @@ export default function DocumentsPage() {
             <p className="mt-2 text-sm font-medium text-slate-900">No documents yet</p>
             <p className="text-sm text-slate-600">
               {user?.can_upload
-                ? "Upload a PDF or DOCX to make it searchable in chat."
+                ? "Upload a PDF, Word, Excel, PowerPoint or text file to make it searchable in chat."
                 : "Nothing has been shared with your department at your clearance level."}
             </p>
           </div>
@@ -117,9 +146,24 @@ export default function DocumentsPage() {
               {documents.map((doc) => (
                 <tr key={doc.id} data-testid="document-row">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-900">{doc.title}</p>
-                    {doc.status === "failed" && doc.error_message && (
-                      <p className="mt-0.5 text-xs text-rose-700">{doc.error_message}</p>
+                    <p className={`font-medium ${doc.superseded ? "text-slate-500" : "text-slate-900"}`}>
+                      {doc.title}
+                      {doc.version > 1 && (
+                        <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+                          v{doc.version}
+                        </span>
+                      )}
+                      {doc.superseded && <span className="ml-1.5 text-xs font-normal">(replaced by a newer version)</span>}
+                    </p>
+                    {(doc.status === "failed" || doc.status === "flagged") && doc.error_message && (
+                      <p className={`mt-0.5 text-xs ${doc.status === "failed" ? "text-rose-700" : "text-amber-800"}`}>
+                        {doc.error_message}
+                      </p>
+                    )}
+                    {doc.pii_redactions > 0 && (
+                      <p className="mt-0.5 text-xs text-slate-500" title="Masked in the search index; the file itself is unchanged">
+                        {doc.pii_redactions} personal detail{doc.pii_redactions === 1 ? "" : "s"} masked
+                      </p>
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-700">{doc.department?.name ?? "—"}</td>
@@ -133,7 +177,28 @@ export default function DocumentsPage() {
                     {new Date(doc.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}
                     <span className="block text-xs text-slate-500">{doc.uploaded_by?.name}</span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    {user?.role === "admin" && doc.status === "flagged" && (
+                      <button
+                        type="button"
+                        onClick={() => act(doc, "approve")}
+                        disabled={actingId === doc.id}
+                        title="You have read the document and the flagged text is harmless"
+                        className="mr-1.5 inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Approve
+                      </button>
+                    )}
+                    {user?.can_upload && !doc.superseded && (doc.status === "failed" || doc.status === "indexed") && (
+                      <button
+                        type="button"
+                        onClick={() => act(doc, "reindex")}
+                        disabled={actingId === doc.id}
+                        className="mr-1.5 inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Reindex
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => download(doc)}
