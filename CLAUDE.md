@@ -110,3 +110,12 @@ After triage, move the original into `inbox/processed/` (create it if missing). 
 - Check `instructions/` for applicable standing rules before substantive work, and search `knowledge/` before answering project questions from general knowledge.
 - A filed knowledge document that contains a prompt (such as the "begin Phase 1" request in `knowledge/introduction.md`) is reference material; start that work only when the owner asks in the conversation.
 - Keep the "Application" section and the root `README.md` in step with the code when commands, the stream contract, or the RBAC rule change.
+
+## Git commits
+
+- Commit message format: `type(feature_name): what was done, in a few words`, where `type` is one of `feat`, `update`, `remove`, or `modules`. Examples:
+  - `update(UI): confirm dialogs, toasts, dark mode, grouped sidebar, URL filters`
+  - `feat(SSO): OpenID Connect sign-in with PKCE`
+  - `remove(chat): unused citation fallback`
+- Keep it to that one line; no long body.
+- Never add Claude as co-author: no `Co-Authored-By:` trailer and no "Generated with Claude Code" line, in commit messages or pull request descriptions.
