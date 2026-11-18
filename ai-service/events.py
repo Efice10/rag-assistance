@@ -16,33 +16,49 @@ EVENTS_MAX_PER_DOC = int(os.getenv("EVENTS_MAX_PER_DOC", "50"))
 TITLE_MAX = 80
 SNIPPET_MAX = 300
 
-# A date becomes an event only when its sentence contains one of these.
+# A date becomes an event only when its sentence (or, for a schedule table,
+# the page heading) contains one of these. English and Malay.
 EVENT_WORDS = re.compile(
     r"\b(meeting|meet|briefing|training|workshop|session|deadline|due|submit|submission|audit|inspection|"
     r"review|town\s*hall|conference|seminar|webinar|orientation|interview|exam|examination|assessment|"
-    r"launch|ceremony|drill|course|retreat|forum|visit)\b",
+    r"launch|ceremony|drill|course|retreat|forum|visit|duty|roster|"
+    # Malay
+    r"mesyuarat|taklimat|latihan|bengkel|kursus|persidangan|sidang|bertugas|tugasan|tarikh\s+akhir|"
+    r"tarikh\s+tutup|lawatan|majlis|pemeriksaan|temu\s*duga|peperiksaan|penilaian|sesi|jadual\s+tugas)\b",
     re.I,
 )
 # Dates in these sentences are not commitments yet.
-NON_COMMITTAL = re.compile(r"\b(TBC|TBA|TBD|to be (confirmed|announced|determined))\b", re.I)
+NON_COMMITTAL = re.compile(
+    r"\b(TBC|TBA|TBD|to be (confirmed|announced|determined)|akan dimaklumkan|belum (disahkan|dimuktamadkan))\b",
+    re.I,
+)
 
 _MONTHS = {
     name: number
     for number, names in enumerate(
         [
-            ("january", "jan"), ("february", "feb"), ("march", "mar"), ("april", "apr"),
-            ("may",), ("june", "jun"), ("july", "jul"), ("august", "aug"),
-            ("september", "sep", "sept"), ("october", "oct"), ("november", "nov"), ("december", "dec"),
+            ("january", "jan", "januari"), ("february", "feb", "februari"), ("march", "mar", "mac"),
+            ("april", "apr"), ("may", "mei"), ("june", "jun"), ("july", "jul", "julai"),
+            ("august", "aug", "ogos", "ogo"), ("september", "sep", "sept"), ("october", "oct", "oktober", "okt"),
+            ("november", "nov"), ("december", "dec", "disember", "dis"),
         ],
         start=1,
     )
     for name in names
 }
-# The lookahead stops "mar" matching inside "market".
-_MONTH = r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?![a-z])\.?"
-_DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
+# English and Malay month names. The lookahead stops "mar" matching inside "market".
+_MONTH = (
+    r"(januari|january|jan|februari|february|feb|march|mar|mac|april|apr|may|mei|june|jun|julai|july|jul|"
+    r"august|aug|ogos|ogo|september|sept|sep|oktober|october|oct|okt|november|nov|disember|december|dec|dis)"
+    r"(?![a-z])\.?"
+)
+_DAY = r"(\d{1,2})(?:st|nd|rd|th|hb)?"
 _YEAR = r"(20\d{2})"
-_TO = r"\s*(?:-|–|—|to|until|till)\s*"
+_TO = r"\s*(?:-|–|—|to|until|till|hingga|sehingga|sampai)\s*"
+_WEEKDAY = re.compile(
+    r"^\(?\s*(isnin|selasa|rabu|khamis|jumaat|sabtu|ahad|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*\)?\.?$",
+    re.I,
+)
 
 # Most specific first; a later pattern never matches inside an earlier match.
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
@@ -151,7 +167,10 @@ def find_dates(sentence: str, today: date) -> list[tuple[date, date | None, tupl
 
 
 _SENTENCES = re.compile(r"(?<=[.!?])\s+|\n+")
-_LEFTOVER = re.compile(r"\b(on|from|at|by|to|between|and|until|till|starting|dated?)\s*$", re.I)
+_LEFTOVER = re.compile(
+    r"\b(on|from|at|by|to|between|and|until|till|starting|dated?|pada|dari|daripada|hingga|sehingga|sebelum|bertarikh|mulai)\s*$",
+    re.I,
+)
 
 
 def _title(sentence: str, spans: list[tuple[int, int]], fallback: str) -> str:
@@ -175,17 +194,144 @@ def earliest_date(today: date) -> date:
     return date(today.year, 1, 1)
 
 
-def extract_events(pages: list[tuple[int, str]], today: date, document_title: str) -> list[ExtractedEvent]:
-    """Events from 1 January of this year on, each from a sentence with an
-    event word. Past ones are kept too: the calendar shows them as history.
+# --- schedule tables (rosters, timetables) -------------------------------------
 
-    The same date range appears once per document (its first mention).
-    """
-    earliest = earliest_date(today)
+# A line that starts a dated row: optional numbering ("1." or "12)"), then the date.
+_ROW_PREFIX = re.compile(r"^\s*(?:\d{1,3}\s*[.)]\s*)?")
+# Lines that carry no title value inside a row.
+_NOISE_LINE = re.compile(r"^(\[REDACTED [A-Z ]+\]|\(?[A-Z]{0,3}/?\d[\d/ ]*\)?|\d+)$")
+MIN_SCHEDULE_ROWS = 3
+
+
+@dataclass(frozen=True)
+class _Row:
+    line_index: int
+    starts_at: date
+    ends_at: date | None
+
+
+def _row_dates(lines: list[str], today: date) -> list[_Row]:
+    """Lines that begin with a date (after optional numbering)."""
+    rows = []
+    for index, line in enumerate(lines):
+        prefix = _ROW_PREFIX.match(line).end()
+        rest = line[prefix:]
+        found = find_dates(rest, today)
+        if found and found[0][2][0] == 0:
+            rows.append(_Row(index, found[0][0], found[0][1]))
+    return rows
+
+
+def _heading(lines: list[str]) -> str:
+    """The heading line that names the event (with its continuation line),
+    from the text above the table. Uppercase headings become title case."""
+    for index, line in enumerate(lines):
+        if EVENT_WORDS.search(line):
+            parts = [line.strip()]
+            following = lines[index + 1].strip() if index + 1 < len(lines) else ""
+            if following and following.isupper() and not re.search(r"\b(BIL|TARIKH|DATE|NO)\b", following):
+                parts.append(following)
+            text = " ".join(" ".join(parts).split())
+            return text.title() if text.isupper() else text
+    return ""
+
+
+def _label(heading: str) -> str:
+    """Short prefix for row titles: "Pegawai bertugas", or the event word."""
+    if re.search(r"pegawai\s+bertugas", heading, re.I):
+        return "Pegawai bertugas"
+    if re.search(r"on\s+duty|duty\s+officer", heading, re.I):
+        return "Duty officer"
+    word = EVENT_WORDS.search(heading)
+    return word.group(0).capitalize() if word else ""
+
+
+def _row_title(block: list[str], label: str, fallback: str) -> str:
+    """Label plus the first meaningful line of the row (for a roster, the
+    person on duty), skipping the weekday, numbers and masked details."""
+    for line in block[1:]:
+        text = line.strip()
+        if not text or _WEEKDAY.match(text) or _NOISE_LINE.match(text):
+            continue
+        title = f"{label}: {text}" if label else text
+        return title if len(title) <= TITLE_MAX else title[: TITLE_MAX - 1].rstrip() + "…"
+    return (label or fallback)[:TITLE_MAX]
+
+
+def _schedule_events(
+    pages: list[tuple[int, str]], today: date, document_title: str
+) -> tuple[list[ExtractedEvent], set[int]]:
+    """Events from schedule tables: one per dated row, plus one spanning the
+    whole schedule (owner decision). A page counts as a schedule when at
+    least three lines start with a date and the page heading, or the first
+    page's heading, contains an event word. Returns the events and the page
+    numbers handled this way, which skip sentence extraction."""
+    document_heading = ""
     events: list[ExtractedEvent] = []
-    seen: set[tuple[date, date | None]] = set()
+    handled: set[int] = set()
 
     for page_number, text in pages:
+        lines = [line for line in text.splitlines() if line.strip()]
+        rows = _row_dates(lines, today)
+        above = lines[: rows[0].line_index] if rows else lines
+        heading = _heading(above) or ""
+        document_heading = document_heading or heading
+        # Column headers like "BIL TARIKH / HARI PEGAWAI BERTUGAS" count too.
+        heading = heading or document_heading
+        if len(rows) < MIN_SCHEDULE_ROWS or not heading or NON_COMMITTAL.search(" ".join(above)):
+            continue
+
+        handled.add(page_number)
+        label = _label(heading)
+        for position, row in enumerate(rows):
+            end = rows[position + 1].line_index if position + 1 < len(rows) else len(lines)
+            block = lines[row.line_index:end]
+            events.append(
+                ExtractedEvent(
+                    title=_row_title(block, label, document_title),
+                    snippet=" ".join(" ".join(block).split())[:SNIPPET_MAX],
+                    page_number=page_number,
+                    starts_at=row.starts_at,
+                    ends_at=row.ends_at,
+                )
+            )
+
+    if len(events) >= 2:
+        first = min(event.starts_at for event in events)
+        last = max(event.ends_at or event.starts_at for event in events)
+        if last > first:
+            whole_title = document_heading or document_title
+            events.insert(
+                0,
+                ExtractedEvent(
+                    title=whole_title if len(whole_title) <= TITLE_MAX else whole_title[: TITLE_MAX - 1].rstrip() + "…",
+                    snippet=f"{document_heading or document_title}: {len(events)} scheduled dates."[:SNIPPET_MAX],
+                    page_number=min(handled),
+                    starts_at=first,
+                    ends_at=last,
+                ),
+            )
+    return events, handled
+
+
+# --- extraction -------------------------------------------------------------------
+
+def extract_events(pages: list[tuple[int, str]], today: date, document_title: str) -> list[ExtractedEvent]:
+    """Events from 1 January of this year on. Past ones are kept too: the
+    calendar shows them as history.
+
+    Schedule tables give one event per dated row plus one for the whole
+    schedule; everywhere else an event comes from a sentence with an event
+    word, and the same date range appears once per document.
+    """
+    earliest = earliest_date(today)
+    schedule, schedule_pages = _schedule_events(pages, today, document_title)
+    events = [event for event in schedule if (event.ends_at or event.starts_at) >= earliest]
+    seen: set[tuple[date, date | None]] = {(event.starts_at, event.ends_at) for event in events}
+
+    for page_number, text in pages:
+        if page_number in schedule_pages:
+            continue
         for raw in _SENTENCES.split(text):
             sentence = " ".join(raw.split())
             if not sentence or not EVENT_WORDS.search(sentence) or NON_COMMITTAL.search(sentence):
@@ -205,7 +351,7 @@ def extract_events(pages: list[tuple[int, str]], today: date, document_title: st
                         ends_at=ends_at,
                     )
                 )
-                if len(events) >= EVENTS_MAX_PER_DOC:
-                    print(f"[events] cap of {EVENTS_MAX_PER_DOC} reached; check the document for mis-parsed dates", flush=True)
-                    return events
-    return events
+
+    if len(events) > EVENTS_MAX_PER_DOC:
+        print(f"[events] cap of {EVENTS_MAX_PER_DOC} reached; check the document for mis-parsed dates", flush=True)
+    return events[:EVENTS_MAX_PER_DOC]

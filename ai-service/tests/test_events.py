@@ -267,3 +267,106 @@ def test_a_flagged_document_stores_no_events(tmp_path, monkeypatch):
     assert result.status == "flagged" and result.events == 0
     assert ("DELETE FROM document_events WHERE document_id = %s", (20,)) in cursor.statements
     assert cursor.inserted == []
+
+
+# --- Malay and schedule tables -----------------------------------------------------
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Mesyuarat pada 5 Disember 2026", [(date(2026, 12, 5), None)]),
+        ("Taklimat 3 Mac 2027", [(date(2027, 3, 3), None)]),
+        ("Bengkel 1 hingga 3 Julai 2026", [(date(2026, 7, 1), date(2026, 7, 3))]),
+        ("Kursus 2hb Ogos 2026", [(date(2026, 8, 2), None)]),
+        ("Lawatan 10 Okt 2026", [(date(2026, 10, 10), None)]),
+    ],
+)
+def test_malay_dates(text, expected):
+    assert dates_in(text) == expected
+
+
+def test_malay_event_words_and_non_committal_phrases():
+    assert len(extract("Mesyuarat Jawatankuasa Audit pada 3 Disember 2026 di Bilik Gerakan.")) == 1
+    assert extract("Taklimat pada 4 Disember 2026, tempat akan dimaklumkan kemudian.") == []
+    assert extract("Pekeliling ini berkuat kuasa mulai 1 Disember 2026.") == []
+
+
+ROSTER_PAGE_1 = """1
+LAMPIRAN A
+SENARAI PEGAWAI BERTUGAS  BAGI MESYUARAT KEDUA
+PENGGAL KELIMA, PARLIMEN KELIMA BELAS
+TAHUN 2026
+DEWAN RAKYAT
+BIL TARIKH / HARI PEGAWAI BERTUGAS AWAM PEGAWAI BERTUGAS TENTERA CATATAN
+Minggu Pertama
+1.  22.06.2026
+(Isnin)
+Nur Amira binti Rusli
+Personel Mystep
+[REDACTED PHONE]
+[REDACTED EMAIL]
+Rang Undang-Undang
+2.  23.06.2026
+(Selasa)
+Lt Kdr Mohamad Sabiron bin Zamri TLDM
+(N/404123)
+Markas Tentera Laut
+3.  24.06.2026
+(Rabu)
+Encik Muhammad Farid Iqbal bin Amran
+Bahagian Teknologi Maklumat"""
+
+ROSTER_PAGE_2 = """2
+BIL TARIKH / HARI PEGAWAI BERTUGAS AWAM PEGAWAI BERTUGAS TENTERA CATATAN
+Minggu Kedua
+4.  29.06.2026
+(Isnin)
+Kapt Muhamad Hanif bin Mohd Ghani TUDM
+5.  30.06.2026
+(Selasa)
+Puan Sharifah Zafirah binti Syed Mustapa
+6.  01.07.2026
+(Rabu)
+Lt Dya Siti Nurkhadijah binti Mohd Ali"""
+
+
+def test_a_roster_gives_one_event_per_row_and_one_for_the_whole_period():
+    found = extract_events([(1, ROSTER_PAGE_1), (2, ROSTER_PAGE_2)], TODAY, "Lampiran A")
+
+    whole, *rows = found
+    assert (whole.starts_at, whole.ends_at) == (date(2026, 6, 22), date(2026, 7, 1))
+    assert whole.title.startswith("Senarai Pegawai Bertugas Bagi Mesyuarat Kedua Penggal Kelima")
+    assert [(row.starts_at, row.title) for row in rows] == [
+        (date(2026, 6, 22), "Pegawai bertugas: Nur Amira binti Rusli"),
+        (date(2026, 6, 23), "Pegawai bertugas: Lt Kdr Mohamad Sabiron bin Zamri TLDM"),
+        (date(2026, 6, 24), "Pegawai bertugas: Encik Muhammad Farid Iqbal bin Amran"),
+        (date(2026, 6, 29), "Pegawai bertugas: Kapt Muhamad Hanif bin Mohd Ghani TUDM"),
+        (date(2026, 6, 30), "Pegawai bertugas: Puan Sharifah Zafirah binti Syed Mustapa"),
+        (date(2026, 7, 1), "Pegawai bertugas: Lt Dya Siti Nurkhadijah binti Mohd Ali"),
+    ]
+    assert [row.page_number for row in rows] == [1, 1, 1, 2, 2, 2]
+    # The row snippet carries the masked contact details, never the real ones.
+    assert "[REDACTED PHONE]" in rows[0].snippet and "@" not in rows[0].snippet
+
+
+def test_two_dated_lines_are_not_a_schedule():
+    page = "Holiday list\n1. 22.06.2026 Public holiday\n2. 23.06.2026 Public holiday"
+
+    assert extract_events([(1, page)], TODAY, "Holidays") == []
+
+
+def test_a_dated_table_without_an_event_heading_is_not_a_schedule():
+    page = "Price list\n1. 01.07.2026\nItem A\n2. 02.07.2026\nItem B\n3. 03.07.2026\nItem C"
+
+    assert extract_events([(1, page)], TODAY, "Prices") == []
+
+
+def test_ingest_passes_masked_pages_so_roster_contacts_never_reach_events(tmp_path, monkeypatch):
+    from ingest import redact_pages
+
+    page = ROSTER_PAGE_1.replace("[REDACTED PHONE]", "011 6942 7442").replace("[REDACTED EMAIL]", "amira.rusli@mod.gov.my")
+    redacted, count = redact_pages([(1, page)])
+    rows = extract_events(redacted, TODAY, "Lampiran A")
+
+    assert count == 2
+    assert all("6942" not in event.snippet and "mod.gov.my" not in event.snippet for event in rows)

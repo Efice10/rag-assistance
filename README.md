@@ -49,7 +49,7 @@ The browser only ever talks to Laravel. The AI service listens on `127.0.0.1` an
 | Processing | Failed documents, documents stuck waiting for a worker, and failed queue jobs (organization-scoped), with retry. |
 | Audit log | Every prompt and every admin change, append-only, searchable, exportable as CSV. |
 | Evaluation | A golden question set scored for answers, citations, refusals and RBAC safety, in CI and against the live stack. |
-| Event calendar | Meetings, deadlines and trainings with a date are found in uploaded documents, confirmed or rejected by an admin or the department's manager, and shown on a month calendar to exactly the people who can see the source document. Upcoming events appear as a dismissable reminder banner; admins set how many days ahead it looks. Review decisions survive re-indexing and new versions. |
+| Event calendar | Meetings, deadlines and trainings with a date are found in uploaded documents (English or Malay, in sentences or in schedule tables such as duty rosters, which give one event per row plus one for the whole period). Upcoming ones are confirmed or rejected by an admin or the department's manager; past ones from this year are added as history. Chips are green for past, red for today and yellow for upcoming. Events are shown on a month calendar to exactly the people who can see the source document. Upcoming events appear as a dismissable reminder banner; admins set how many days ahead it looks. Review decisions survive re-indexing and new versions. |
 
 ## Security model
 
@@ -164,12 +164,12 @@ To see the isolation working: upload a Confidential document as `manager@acme.te
 ## Tests
 
 ```powershell
-# Backend: 130 Pest tests, in-memory SQLite, no external services needed
+# Backend: 131 Pest tests, in-memory SQLite, no external services needed
 cd backend
 php vendor\bin\pest
 php vendor\bin\pest --filter="chat scope"          # a single group
 
-# AI service: 102 pytest tests, no database or Ollama needed (the real-OCR test runs only where Tesseract is installed)
+# AI service: 114 pytest tests, no database or Ollama needed (the real-OCR test runs only where Tesseract is installed)
 cd ..\ai-service
 .\venv\Scripts\python.exe -m pytest
 .\venv\Scripts\python.exe -m pytest -k "admin"     # a single test
