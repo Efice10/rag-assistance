@@ -97,6 +97,13 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Send each query in one network round trip instead of two
+            // (prepare, then execute). The database is remote (Supabase), so
+            // this roughly halves the time of every request. Values are still
+            // bound and escaped by PDO; nothing is interpolated by hand.
+            'options' => extension_loaded('pdo_pgsql') ? [
+                PDO::ATTR_EMULATE_PREPARES => (bool) env('DB_EMULATE_PREPARES', true),
+            ] : [],
         ],
 
         'sqlsrv' => [
