@@ -48,6 +48,11 @@ class UserFactory extends Factory
         return $this->state(fn () => ['role' => User::ROLE_MANAGER, 'clearance_level' => $clearance]);
     }
 
+    public function deactivated(): static
+    {
+        return $this->state(fn () => ['deactivated_at' => now()]);
+    }
+
     public function staff(int $clearance = 1): static
     {
         return $this->state(fn () => ['role' => User::ROLE_STAFF, 'clearance_level' => $clearance]);

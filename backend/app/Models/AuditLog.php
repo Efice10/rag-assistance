@@ -14,6 +14,18 @@ class AuditLog extends Model
 
     public const ACTION_CHAT_QUERY_FAILED = 'chat.query_failed';
 
+    public const ACTION_USER_CREATED = 'user.created';
+
+    public const ACTION_USER_UPDATED = 'user.updated';
+
+    public const ACTION_USER_DEACTIVATED = 'user.deactivated';
+
+    public const ACTION_USER_REACTIVATED = 'user.reactivated';
+
+    public const ACTION_DEPARTMENT_CREATED = 'department.created';
+
+    public const ACTION_DEPARTMENT_RENAMED = 'department.renamed';
+
     protected $fillable = [
         'organization_id',
         'user_id',
@@ -36,6 +48,22 @@ class AuditLog extends Model
         // Append-only. Database triggers enforce the same rule for raw queries.
         static::updating(fn () => throw new LogicException('Audit logs are immutable and cannot be updated.'));
         static::deleting(fn () => throw new LogicException('Audit logs are immutable and cannot be deleted.'));
+    }
+
+    /**
+     * Record an administrative change. The description goes in the `prompt`
+     * column so the audit page shows it in the same place as chat prompts.
+     */
+    public static function recordAdminAction(User $actor, string $action, string $description, ?string $ipAddress): self
+    {
+        return static::create([
+            'organization_id' => $actor->organization_id,
+            'user_id' => $actor->id,
+            'action' => $action,
+            'prompt' => $description,
+            'retrieved_document_ids' => [],
+            'ip_address' => $ipAddress,
+        ]);
     }
 
     public function user(): BelongsTo

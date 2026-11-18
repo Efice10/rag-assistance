@@ -3,8 +3,8 @@
 Proposed: 2026-11-16. Status of the base product: all five build phases from
 `knowledge/introduction.md` are complete and green (Pest 34/34, pytest 17/17,
 Playwright 3/3). This document lists candidate modules in the order they were
-presented, with a suggested build order at the end. Nothing here is started —
-each module begins only when requested in the conversation.
+presented, with a suggested build order at the end. Modules marked **done**
+carry a status line; the rest begin only when requested in the conversation.
 
 ## Ground rules (apply to every module)
 
@@ -22,6 +22,12 @@ each module begins only when requested in the conversation.
 ---
 
 ## 1. Admin user & organization management
+
+**Status: done (2026-11-18).** Built as planned, with two adjustments: users
+are deactivated through a `deactivated_at` timestamp (plus a `reactivate`
+endpoint), and the last-admin guard is structural: an admin cannot change their
+own role or deactivate themselves, so the acting admin always remains. Every
+change is written to `audit_logs`. Pest 25 new tests, Playwright 1 new flow.
 
 **What** — Admin-only CRUD for users and departments: create users, edit
 name/role/department/clearance, deactivate (soft-delete, never hard delete —

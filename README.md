@@ -41,8 +41,12 @@ The browser only ever talks to Laravel. The AI service listens on `127.0.0.1` an
 | AI service is internal | `X-Internal-Secret` header checked with a constant-time compare |
 | Audit log is append-only | Eloquent model guards plus database triggers on `audit_logs` (PostgreSQL and SQLite) |
 | No answer without evidence | Retrieval below the similarity threshold returns a fixed refusal without calling the model |
+| Admins manage only their own organization | `UserPolicy` and `SaveDepartmentRequest`; another organization's user or department returns 404 |
+| Users are deactivated, never deleted | `users.deactivated_at`; deactivation revokes tokens, login refuses, and the `active` middleware rejects any remaining token |
+| An organization always keeps an admin | Admins cannot change their own role or deactivate themselves |
+| Admin changes are audited | Every user and department change writes an `audit_logs` row (`user.*`, `department.*`) |
 
-Roles: **admin** (all departments in their organization, uploads, audit logs), **manager** (own department, uploads up to their clearance), **staff** (own department, read and chat only).
+Roles: **admin** (all departments in their organization, uploads, user and department management, audit logs), **manager** (own department, uploads up to their clearance), **staff** (own department, read and chat only).
 
 ## Prerequisites
 
@@ -120,7 +124,7 @@ To see the isolation working: upload a Confidential document as `manager@acme.te
 ## Tests
 
 ```powershell
-# Backend: 34 Pest tests, in-memory SQLite, no external services needed
+# Backend: 59 Pest tests, in-memory SQLite, no external services needed
 cd backend
 php vendor\bin\pest
 php vendor\bin\pest --filter="chat scope"          # a single group
@@ -148,7 +152,14 @@ GitHub Actions (`.github/workflows/ci.yml`) runs all three suites on every push 
 | POST | `/api/login` | public | Returns a Sanctum token and the user profile |
 | POST | `/api/logout` | signed in | Revokes the current token |
 | GET | `/api/me` | signed in | Current profile |
-| GET | `/api/departments` | signed in | Departments the user may upload to |
+| GET | `/api/departments` | signed in | Departments the user may upload to (admins also get user and document counts) |
+| POST | `/api/departments` | admin | Create a department in the admin's organization |
+| PUT | `/api/departments/{id}` | admin | Rename a department |
+| GET | `/api/users` | admin | Paginated, searchable users of the organization (`?q=`) |
+| POST | `/api/users` | admin | Create a user (clearance up to the admin's own) |
+| PUT | `/api/users/{id}` | admin | Edit name, email, role, department, clearance, or reset the password |
+| PUT | `/api/users/{id}/deactivate` | admin | Block sign-in and revoke tokens (not self) |
+| PUT | `/api/users/{id}/reactivate` | admin | Restore access |
 | GET | `/api/documents` | signed in | Documents within the user's scope |
 | POST | `/api/documents` | admin, manager | Upload a PDF/DOCX (20 MB max); queues ingestion |
 | GET | `/api/documents/{id}/download` | signed in | Download, re-checking scope |

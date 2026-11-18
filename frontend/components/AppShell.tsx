@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Loader2, LogOut, Menu, MessageSquare, ScrollText, ShieldCheck, X } from "lucide-react";
+import { FileText, Loader2, LogOut, Menu, MessageSquare, ScrollText, ShieldCheck, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { ClearanceBadge } from "./Badges";
 const NAV = [
   { href: "/chat", label: "Chat", icon: MessageSquare, adminOnly: false },
   { href: "/documents", label: "Documents", icon: FileText, adminOnly: false },
+  { href: "/users", label: "Users", icon: Users, adminOnly: true },
   { href: "/audit-logs", label: "Audit logs", icon: ScrollText, adminOnly: true },
 ];
 

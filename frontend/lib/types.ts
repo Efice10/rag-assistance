@@ -52,6 +52,30 @@ export interface AuditLogItem {
   documents: { id: number; title: string }[];
 }
 
+export interface ManagedUser {
+  id: number;
+  name: string;
+  email: string;
+  role: Role;
+  clearance_level: number;
+  department: NamedRef | null;
+  active: boolean;
+  deactivated_at: string | null;
+  created_at: string | null;
+}
+
+/** A department as the admin sees it, with counts. */
+export interface DepartmentRow extends NamedRef {
+  users_count?: number;
+  documents_count?: number;
+}
+
+export const ROLE_LABELS: Record<Role, string> = {
+  admin: "Admin",
+  manager: "Manager",
+  staff: "Staff",
+};
+
 export interface PageMeta {
   current_page: number;
   last_page: number;

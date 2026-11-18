@@ -6,6 +6,16 @@ import { api, errorMessage } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { AuditLogItem, PageMeta } from "@/lib/types";
 
+/** Administrative actions, labelled so they stand apart from chat prompts. */
+const ADMIN_ACTIONS: Record<string, string> = {
+  "user.created": "User created",
+  "user.updated": "User updated",
+  "user.deactivated": "User deactivated",
+  "user.reactivated": "User reactivated",
+  "department.created": "Department created",
+  "department.renamed": "Department renamed",
+};
+
 export default function AuditLogsPage() {
   const session = useSession();
   const isAdmin = session?.user.role === "admin";
@@ -59,8 +69,8 @@ export default function AuditLogsPage() {
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Audit logs</h1>
           <p className="text-sm text-slate-600">
-            Every prompt sent to the assistant in your organization, with the documents it cited. Records
-            cannot be edited or deleted.
+            Every prompt sent to the assistant in your organization, with the documents it cited, and every
+            change an administrator made to users or departments. Records cannot be edited or deleted.
           </p>
         </div>
         <form
@@ -116,7 +126,7 @@ export default function AuditLogsPage() {
               <tr>
                 <th className="px-4 py-3 font-medium">Time</th>
                 <th className="px-4 py-3 font-medium">User</th>
-                <th className="px-4 py-3 font-medium">Prompt</th>
+                <th className="px-4 py-3 font-medium">Prompt or change</th>
                 <th className="px-4 py-3 font-medium">Cited documents</th>
                 <th className="px-4 py-3 font-medium">IP address</th>
               </tr>
@@ -132,6 +142,11 @@ export default function AuditLogsPage() {
                     <p className="text-xs text-slate-500">{log.user?.email}</p>
                   </td>
                   <td className="max-w-sm px-4 py-3 text-slate-800">
+                    {ADMIN_ACTIONS[log.action] && (
+                      <span className="mr-2 rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-medium text-indigo-700">
+                        {ADMIN_ACTIONS[log.action]}
+                      </span>
+                    )}
                     {log.prompt}
                     {log.action === "chat.query_failed" && (
                       <span className="ml-2 rounded bg-rose-50 px-1.5 py-0.5 text-xs font-medium text-rose-700">

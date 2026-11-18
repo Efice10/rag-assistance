@@ -21,6 +21,14 @@ class AuthController extends Controller
             ]);
         }
 
+        // Checked after the password, so the message never reveals account
+        // state to someone who does not know the credentials.
+        if (! $user->isActive()) {
+            throw ValidationException::withMessages([
+                'email' => ['This account has been deactivated. Contact your administrator.'],
+            ]);
+        }
+
         return response()->json([
             'token' => $user->createToken('web')->plainTextToken,
             'user' => $user->profile(),
