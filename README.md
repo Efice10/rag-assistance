@@ -242,7 +242,8 @@ Chat stream events: `token` (`{"text"}`), `sources` (`{"sources":[{document_id, 
 | Document | Contents |
 |---|---|
 | [docs/roadmap.md](docs/roadmap.md) | Phase 1: the 15 modules built, and open items |
-| [docs/roadmap-phase-2.md](docs/roadmap-phase-2.md) | Phase 2: proposed modules 16 to 28, with a build order |
+| [docs/roadmap-phase-2.md](docs/roadmap-phase-2.md) | Phase 2: proposed modules 16 to 29, with a build order |
+| [docs/module-29-event-calendar.md](docs/module-29-event-calendar.md) | Full design of module 29, the event calendar |
 | [knowledge/introduction.md](knowledge/introduction.md) | The original specification |
 | [knowledge/blueprint.md](knowledge/blueprint.md) | Windows installation guide and daily runbook |
 | [CLAUDE.md](CLAUDE.md) | Working rules for Claude Code in this repository |

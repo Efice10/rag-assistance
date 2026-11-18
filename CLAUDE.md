@@ -18,7 +18,7 @@ Where markdown lives (keep it this way; do not add markdown files elsewhere):
 |---|---|
 | `README.md` | The project: features, security model, setup, running, tests, API |
 | `CLAUDE.md` | Guidance for Claude (this file) |
-| `docs/` | Project documents written during the work: `roadmap.md` (Phase 1, done), `roadmap-phase-2.md` (proposed) |
+| `docs/` | Project documents written during the work: `roadmap.md` (Phase 1, done), `roadmap-phase-2.md` (proposed), and one `module-<number>-<name>.md` per module that gets a full design |
 | `knowledge/` | Owner-provided source material (spec, blueprint, design); filed by the content pipeline, not edited |
 | `inbox/`, `instructions/` | The content pipeline (see below) |
 | `backend/README.md`, `frontend/README.md` | One-screen pointers for each service |

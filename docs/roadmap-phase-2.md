@@ -29,6 +29,7 @@ Nothing here is started. Each module begins only when the owner asks for it.
 | 26 | Windows production setup | Operations | M | – |
 | 27 | Email notifications | Operations | S | best after 20, 21 |
 | 28 | Chat in Teams or Slack | Operations | L | 18 recommended |
+| 29 | Event calendar ([full design](module-29-event-calendar.md)) | Compliance | M | – (relates to 20, 21, 27) |
 
 Effort: S is about a focused session, M a phase-sized piece, L several sessions.
 
@@ -155,6 +156,12 @@ Effort: S is about a focused session, M a phase-sized piece, L several sessions.
 
 **Tests.** Generation uses only text the requester can see; people can only take quizzes for documents in their scope.
 
+### 29. Event calendar
+
+**What.** Dates in uploaded documents ("1-2 December 2026 meeting") are extracted at ingest, reviewed by an admin, shown on a `/calendar` page scoped like the source document, and surfaced as in-app reminders.
+
+The full design is in [module-29-event-calendar.md](module-29-event-calendar.md).
+
 ---
 
 ## C. Operations
@@ -200,3 +207,5 @@ Effort: S is about a focused session, M a phase-sized piece, L several sessions.
 | 3 | **18, 23, 27** | Protect admin accounts, give users a way to ask for access, start notifying |
 | 4 | **26** | Run it for real users |
 | 5 | **19, 22, 24, 25, 28** | Privacy requests, version diffs, Malay, quizzes, chat platforms |
+
+Module 29 (event calendar) depends on nothing and can be pulled into any wave; it fits naturally after 21, so review dates can join the calendar.
