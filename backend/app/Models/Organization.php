@@ -10,7 +10,18 @@ class Organization extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug'];
+    protected $fillable = ['name', 'slug', 'event_reminder_days'];
+
+    protected function casts(): array
+    {
+        return ['event_reminder_days' => 'integer'];
+    }
+
+    /** How far ahead the reminder banner looks (module 29). */
+    public function reminderDays(): int
+    {
+        return (int) ($this->event_reminder_days ?? 7);
+    }
 
     public function departments(): HasMany
     {

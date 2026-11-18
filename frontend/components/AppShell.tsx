@@ -3,6 +3,7 @@
 import {
   Activity,
   BarChart3,
+  CalendarDays,
   FileText,
   LogOut,
   Menu,
@@ -20,7 +21,9 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { setSession, useSession } from "@/lib/session";
 import type { User } from "@/lib/types";
+import { refreshUpcoming, resetUpcoming, useUpcoming } from "@/lib/events";
 import { ClearanceBadge } from "./Badges";
+import { CalendarBadges, ReminderBanner } from "./ReminderBanner";
 import { ThemeToggle } from "./ThemeToggle";
 
 const NAV_GROUPS = [
@@ -30,6 +33,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/chat", label: "Chat", icon: MessageSquare },
       { href: "/documents", label: "Documents", icon: FileText },
+      { href: "/calendar", label: "Calendar", icon: CalendarDays },
     ],
   },
   {
@@ -63,6 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The shell renders nothing but a spinner until the session is read in the
   // browser, so reading localStorage here cannot cause a hydration mismatch.
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const upcoming = useUpcoming();
 
   function toggleCollapsed(next: boolean) {
     setCollapsed(next);
@@ -80,6 +85,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       router.replace("/login");
     }
   }, [session, router]);
+
+  // Upcoming events and the review count, once per sign-in (module 29).
+  useEffect(() => {
+    if (token) {
+      refreshUpcoming();
+    } else {
+      resetUpcoming();
+    }
+  }, [token]);
 
   // Refresh the profile once per sign-in, so a role or clearance change made
   // by an administrator shows up without signing out.
@@ -150,6 +164,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const groups = NAV_GROUPS.filter((group) => !group.adminOnly || user.role === "admin");
+  const badgeCount = upcoming.events.length + (upcoming.pendingReview ?? 0);
 
   const sidebar = (compact: boolean) => (
     <div className="flex h-full flex-col">
@@ -191,8 +206,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     compact ? "justify-center px-0" : "px-3"
                   } ${active ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
                 >
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className={compact ? "sr-only" : ""}>{label}</span>
+                  <span className="relative">
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                    {compact && href === "/calendar" && badgeCount > 0 && (
+                      <span className="absolute -right-1.5 -top-1.5 h-2 w-2 rounded-full bg-indigo-600" aria-hidden />
+                    )}
+                  </span>
+                  <span className={compact ? "sr-only" : "flex-1"}>{label}</span>
+                  {!compact && href === "/calendar" && (
+                    <CalendarBadges upcoming={upcoming.events.length} pending={upcoming.pendingReview} />
+                  )}
                 </Link>
               );
             })}
@@ -318,7 +341,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
 
-        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6">{children}</main>
+        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6">
+          {pathname !== "/calendar" && <ReminderBanner />}
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -43,6 +43,12 @@ return [
         'query_timeout' => env('AI_QUERY_TIMEOUT', 300),
     ],
 
+    // Event calendar (module 29). The app stores timestamps in UTC; "today"
+    // for events (date-only, all-day) is taken in this time zone instead.
+    'calendar' => [
+        'timezone' => env('CALENDAR_TIMEZONE', 'Asia/Kuala_Lumpur'),
+    ],
+
     // OpenID Connect sign-in. Per-organization provider settings live in the
     // sso_connections table; the identity provider sends the browser back to
     // this frontend page, which hands the code to /api/sso/callback.

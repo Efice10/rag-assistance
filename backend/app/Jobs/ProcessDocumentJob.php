@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Document;
+use App\Models\DocumentEvent;
 use App\Services\AiServiceClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -43,6 +44,8 @@ class ProcessDocumentJob implements ShouldQueue
                 'file_path' => Storage::disk()->path($document->file_path),
                 'supersedes_document_ids' => $older,
                 'allow_flagged' => $document->approved_at !== null,
+                // Event dates before this are not extracted (module 29).
+                'today' => DocumentEvent::today()->toDateString(),
             ]);
         } catch (Throwable $e) {
             report($e);

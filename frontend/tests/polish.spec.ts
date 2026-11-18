@@ -1,4 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { stubBackgroundCalls } from "./stubs";
+
+test.beforeEach(async ({ page }) => {
+  await stubBackgroundCalls(page);
+});
 
 /** Theme, sidebar, confirm dialog and URL-kept filters, against a stubbed API. */
 test.skip(!!process.env.E2E_LIVE, "stubbed only");

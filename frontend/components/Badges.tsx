@@ -1,7 +1,7 @@
 import { AlertCircle, CheckCircle2, Clock, Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
 import { CLEARANCE_LABELS, type DocumentStatus } from "@/lib/types";
 
-const CLEARANCE_STYLES: Record<number, string> = {
+export const CLEARANCE_STYLES: Record<number, string> = {
   1: "bg-emerald-50 text-emerald-800 ring-emerald-600/20",
   2: "bg-sky-50 text-sky-800 ring-sky-600/20",
   3: "bg-amber-50 text-amber-900 ring-amber-600/30",

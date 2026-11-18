@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ClearanceBadge } from "@/components/Badges";
+import { ReminderSettings } from "@/components/ReminderSettings";
 import { SsoSettings } from "@/components/SsoSettings";
 import { UserModal } from "@/components/UserModal";
 import { api, errorMessage } from "@/lib/api";
@@ -319,6 +320,7 @@ export default function UsersPage() {
       </div>
 
       <SsoSettings departments={departments} />
+      <ReminderSettings />
 
       {modal && actor && (
         <UserModal

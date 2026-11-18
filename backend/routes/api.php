@@ -6,8 +6,10 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\EventController;
 use App\Http\Controllers\MessageFeedbackController;
 use App\Http\Controllers\MetricsController;
+use App\Http\Controllers\OrganizationSettingsController;
 use App\Http\Controllers\ProcessingController;
 use App\Http\Controllers\SsoController;
 use App\Http\Controllers\UserController;
@@ -42,6 +44,14 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // 20 prompts per minute per user, counted in the cache store (Redis locally).
     Route::post('/chat', ChatController::class)->middleware('throttle:20,1');
 
+    // Event calendar (module 29).
+    Route::get('/events', [EventController::class, 'index']);
+    Route::get('/events/upcoming', [EventController::class, 'upcoming']);
+    Route::get('/events/pending', [EventController::class, 'pending']);
+    Route::post('/events/{event}/dismiss', [EventController::class, 'dismiss'])->whereNumber('event');
+    Route::post('/events/{event}/confirm', [EventController::class, 'confirm'])->whereNumber('event');
+    Route::post('/events/{event}/reject', [EventController::class, 'reject'])->whereNumber('event');
+
     // The user's own chat history and answer ratings.
     Route::get('/conversations', [ConversationController::class, 'index']);
     Route::get('/conversations/{conversation}', [ConversationController::class, 'show'])->whereNumber('conversation');
@@ -53,6 +63,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // Admin views.
     Route::get('/admin/metrics', MetricsController::class);
+    Route::get('/admin/settings', [OrganizationSettingsController::class, 'show']);
+    Route::put('/admin/settings', [OrganizationSettingsController::class, 'update']);
     Route::get('/admin/sso', [SsoController::class, 'showSettings']);
     Route::put('/admin/sso', [SsoController::class, 'updateSettings']);
     Route::get('/admin/processing', [ProcessingController::class, 'index']);

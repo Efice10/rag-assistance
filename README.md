@@ -49,6 +49,7 @@ The browser only ever talks to Laravel. The AI service listens on `127.0.0.1` an
 | Processing | Failed documents, documents stuck waiting for a worker, and failed queue jobs (organization-scoped), with retry. |
 | Audit log | Every prompt and every admin change, append-only, searchable, exportable as CSV. |
 | Evaluation | A golden question set scored for answers, citations, refusals and RBAC safety, in CI and against the live stack. |
+| Event calendar | Meetings, deadlines and trainings with a date are found in uploaded documents, confirmed or rejected by an admin or the department's manager, and shown on a month calendar to exactly the people who can see the source document. Upcoming events appear as a dismissable reminder banner; admins set how many days ahead it looks. Review decisions survive re-indexing and new versions. |
 
 ## Security model
 
@@ -163,12 +164,12 @@ To see the isolation working: upload a Confidential document as `manager@acme.te
 ## Tests
 
 ```powershell
-# Backend: 109 Pest tests, in-memory SQLite, no external services needed
+# Backend: 125 Pest tests, in-memory SQLite, no external services needed
 cd backend
 php vendor\bin\pest
 php vendor\bin\pest --filter="chat scope"          # a single group
 
-# AI service: 66 pytest tests, no database or Ollama needed (the real-OCR test runs only where Tesseract is installed)
+# AI service: 97 pytest tests, no database or Ollama needed (the real-OCR test runs only where Tesseract is installed)
 cd ..\ai-service
 .\venv\Scripts\python.exe -m pytest
 .\venv\Scripts\python.exe -m pytest -k "admin"     # a single test
@@ -212,6 +213,13 @@ GitHub Actions (`.github/workflows/ci.yml`) runs all three suites and the struct
 | POST | `/api/documents/{id}/reindex` | admin, manager in scope | Queue the document again |
 | POST | `/api/documents/{id}/approve` | admin | Release a document held for review (audited) |
 | POST | `/api/chat` | signed in, 20/min | Streams the answer as Server-Sent Events; `conversation_id` for a follow-up |
+| GET | `/api/events?from=&to=` | signed in | Confirmed events in the window (default: this month), scoped like documents |
+| GET | `/api/events/upcoming` | signed in | Reminders: confirmed events within the organization's window, minus dismissed; review count for reviewers |
+| POST | `/api/events/{id}/dismiss` | signed in, in scope | Silence one reminder (the event stays on the calendar) |
+| GET | `/api/events/pending` | admin, manager | Events waiting for review in the reviewer's scope |
+| POST | `/api/events/{id}/confirm` | admin, manager in scope | Confirm, optionally correcting title and dates (audited) |
+| POST | `/api/events/{id}/reject` | admin, manager in scope | Reject an extraction (audited) |
+| GET, PUT | `/api/admin/settings` | admin | Organization settings: `event_reminder_days` (1 to 60) |
 | GET | `/api/conversations` | signed in | The user's own conversations |
 | GET | `/api/conversations/{id}` | owner | Messages, with withheld answers masked |
 | DELETE | `/api/conversations/{id}` | owner | Delete a conversation (the audit log keeps the prompts) |

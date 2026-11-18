@@ -1,6 +1,14 @@
 # Module 29: Event Calendar
 
-Proposed 2026-11-18. **Status: designed, open questions decided, not started.** Build only when the owner asks for it.
+Proposed 2026-11-18. **Status: built 2026-11-18** and verified on the live database.
+
+## As built (differences from the design below)
+
+- **No `dateparser` package.** `ai-service/events.py` has its own small date parser covering exactly the forms listed in section 1, plus `2026-12-05` and `05/12/2026` (day first). It needs no install and every rule is unit-tested.
+- **"Today"** is computed in Laravel in `CALENDAR_TIMEZONE` (default `Asia/Kuala_Lumpur`), because the app's timestamps are UTC; it is sent to the AI service with each ingest.
+- **Review decisions survive re-indexing** by matching on new `extracted_starts_at` / `extracted_ends_at` columns, so a reviewer's date correction does not break the match.
+- **The pending list** is `GET /api/events/pending` (admins and managers), not under `/api/admin/`, because managers review too.
+- **Tests:** pytest 27 new (extraction and storage), Pest 16, Playwright 4. Live check: extraction skipped an effective date and a TBC date; another department saw nothing; re-index kept a corrected confirmation and a rejection; a new version sent only the moved meeting back to review.
 
 Part of [roadmap-phase-2.md](roadmap-phase-2.md) as module 29. Related modules:
 

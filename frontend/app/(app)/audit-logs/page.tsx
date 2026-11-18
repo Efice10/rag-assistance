@@ -18,6 +18,9 @@ const ADMIN_ACTIONS: Record<string, string> = {
   "document.approved": "Document approved",
   "user.provisioned": "Account created by SSO",
   "sso.updated": "SSO settings changed",
+  "event.confirmed": "Event confirmed",
+  "event.rejected": "Event rejected",
+  "settings.updated": "Settings changed",
 };
 
 export default function AuditLogsPage() {

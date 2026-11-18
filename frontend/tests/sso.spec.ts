@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { stubBackgroundCalls } from "./stubs";
+
+test.beforeEach(async ({ page }) => {
+  await stubBackgroundCalls(page);
+});
 
 /** Single sign-on, against a stubbed Laravel API and a fake identity provider. */
 test.skip(!!process.env.E2E_LIVE, "stubbed only");

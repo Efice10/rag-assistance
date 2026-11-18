@@ -77,6 +77,20 @@ export interface SavedTurn {
   message_id: number;
 }
 
+export interface CalendarEvent {
+  id: number;
+  title: string;
+  snippet: string;
+  page_number: number;
+  /** YYYY-MM-DD; events are all-day. */
+  starts_at: string;
+  ends_at: string | null;
+  status: "pending" | "confirmed" | "rejected";
+  clearance_level: number;
+  document: { id: number; title: string } | null;
+  department: NamedRef | null;
+}
+
 export interface AuditLogItem {
   id: number;
   action: string;

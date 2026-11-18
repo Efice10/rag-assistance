@@ -1,4 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { stubBackgroundCalls } from "./stubs";
+
+test.beforeEach(async ({ page }) => {
+  await stubBackgroundCalls(page);
+});
 
 /**
  * Admin user management, against a stubbed Laravel API. Skipped with

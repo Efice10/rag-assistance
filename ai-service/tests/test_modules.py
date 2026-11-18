@@ -244,6 +244,9 @@ class FakeCursor:
     def execute(self, sql, params=None):
         self.log.append((" ".join(sql.split()), params))
 
+    def fetchall(self):
+        return []
+
     def __enter__(self):
         return self
 

@@ -32,6 +32,12 @@ class AuditLog extends Model
 
     public const ACTION_USER_PROVISIONED = 'user.provisioned';
 
+    public const ACTION_EVENT_CONFIRMED = 'event.confirmed';
+
+    public const ACTION_EVENT_REJECTED = 'event.rejected';
+
+    public const ACTION_SETTINGS_UPDATED = 'settings.updated';
+
     protected $fillable = [
         'organization_id',
         'user_id',

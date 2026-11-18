@@ -1,7 +1,7 @@
 # Roadmap: Phase 2 (proposed)
 
 Proposed 2026-11-18, after all 15 Phase 1 modules were built ([roadmap.md](roadmap.md)).
-Nothing here is started. Each module begins only when the owner asks for it.
+Module 29 (event calendar) is built; the others begin only when the owner asks for them.
 
 ## Ground rules (same as Phase 1)
 
@@ -29,7 +29,7 @@ Nothing here is started. Each module begins only when the owner asks for it.
 | 26 | Windows production setup | Operations | M | – |
 | 27 | Email notifications | Operations | S | best after 20, 21 |
 | 28 | Chat in Teams or Slack | Operations | L | 18 recommended |
-| 29 | Event calendar ([full design](module-29-event-calendar.md)) | Compliance | M | – (relates to 20, 21, 27) |
+| 29 | Event calendar ([full design](module-29-event-calendar.md)) — **built** | Compliance | M | – (relates to 20, 21, 27) |
 
 Effort: S is about a focused session, M a phase-sized piece, L several sessions.
 
