@@ -34,6 +34,7 @@ function calendarEvent(id: number, title: string, status = "confirmed", starts =
     starts_at: starts,
     ends_at: ends,
     status,
+    auto_confirmed: false,
     clearance_level: 3,
     document: { id: 10, title: "Board Memo" },
     department: { id: 1, name: "Procurement" },
@@ -141,4 +142,32 @@ test("the visible month is kept in the address bar", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`month=${monthKey(1)}`));
   await page.getByRole("button", { name: "Today" }).click();
   await expect(page).toHaveURL(/\/calendar$/);
+});
+
+test("chips are green for past, red for today and yellow for upcoming, with a key", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-11-18T10:00:00"));
+  const state = await setUp(page);
+  state.confirmed = [
+    { ...calendarEvent(11, "Safety audit", "confirmed", "2026-11-03", null), auto_confirmed: true },
+    calendarEvent(12, "Audit week", "confirmed", "2026-11-16", "2026-11-20"),
+    calendarEvent(13, "Board meeting", "confirmed", "2026-11-25", null),
+  ];
+  await page.goto("/calendar?month=2026-11");
+
+  const chip = (title: string) => page.getByTestId("event-chip").filter({ hasText: title }).first();
+  await expect(chip("Safety audit")).toHaveAttribute("data-timing", "past");
+  await expect(chip("Audit week")).toHaveAttribute("data-timing", "today"); // running today counts as today
+  await expect(chip("Board meeting")).toHaveAttribute("data-timing", "future");
+  await expect(page.getByTestId("legend")).toHaveText(/Past.*Today.*Upcoming/);
+
+  // The colours really differ: green, red, yellow backgrounds.
+  const background = (title: string) => chip(title).evaluate((el) => getComputedStyle(el).backgroundColor);
+  const colours = new Set([await background("Safety audit"), await background("Audit week"), await background("Board meeting")]);
+  expect(colours.size).toBe(3);
+
+  await page.getByTestId("month-grid").getByRole("button", { name: /November 3, 2026|3 November 2026/ }).click();
+  const detail = page.getByTestId("event-detail");
+  await expect(detail.getByTestId("timing-badge")).toHaveText("Past");
+  // A day with one event opens it straight away.
+  await expect(detail.getByTestId("auto-confirmed")).toContainText("Added automatically");
 });

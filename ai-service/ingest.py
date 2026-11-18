@@ -2,7 +2,7 @@
 
 import re
 import zipfile
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -312,14 +312,21 @@ def store_events(cur, request: IngestRequest, events: list[ExtractedEvent]) -> N
     if not events:
         return
 
+    today = request.today or date.today()
     rows = []
     for event in events:
         decided = decisions.get((event.starts_at, event.ends_at))
         if decided:
             _, _, status, title, starts_at, ends_at, confirmed_by, confirmed_at = decided
         else:
-            status, title, starts_at, ends_at = "pending", event.title, event.starts_at, event.ends_at
-            confirmed_by = confirmed_at = None
+            title, starts_at, ends_at = event.title, event.starts_at, event.ends_at
+            # An event already over is history: it goes straight onto the
+            # calendar (no reviewer, so confirmed_by stays empty). Anything
+            # from today on waits for review.
+            if (event.ends_at or event.starts_at) < today:
+                status, confirmed_by, confirmed_at = "confirmed", None, datetime.now(timezone.utc)
+            else:
+                status, confirmed_by, confirmed_at = "pending", None, None
         rows.append((
             request.document_id, request.organization_id, request.department_id, request.clearance_level,
             title, event.snippet, event.page_number, starts_at, ends_at,

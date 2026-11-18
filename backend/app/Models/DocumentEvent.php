@@ -100,6 +100,9 @@ class DocumentEvent extends Model
             'starts_at' => $this->starts_at?->toDateString(),
             'ends_at' => $this->ends_at?->toDateString(),
             'status' => $this->status,
+            // Confirmed without a reviewer: the event was already over when
+            // its document was indexed, so it went onto the calendar as history.
+            'auto_confirmed' => $this->status === self::STATUS_CONFIRMED && $this->confirmed_by === null,
             'clearance_level' => $this->clearance_level,
             'document' => $this->document?->only(['id', 'title']),
             'department' => $this->department?->only(['id', 'name']),

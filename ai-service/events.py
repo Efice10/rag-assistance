@@ -1,9 +1,10 @@
 """Find dated events (meetings, deadlines, trainings) in document text.
 
 Deterministic and dependency-free: a small set of date patterns, accepted
-only in sentences that contain an event word and only for dates from today
-on. Every extracted event still waits for a person to confirm it (module 29),
-so the aim is high precision with a short, reviewable list.
+only in sentences that contain an event word and only for dates from
+1 January of the current year on. Upcoming events wait for a person to
+confirm them; events already over are history and are stored as confirmed
+(module 29), so the aim is high precision with a short, reviewable list.
 """
 
 import os
@@ -168,11 +169,19 @@ def _title(sentence: str, spans: list[tuple[int, int]], fallback: str) -> str:
     return text if len(text) <= TITLE_MAX else text[: TITLE_MAX - 1].rstrip() + "…"
 
 
+def earliest_date(today: date) -> date:
+    """Events are kept from 1 January of the current year (owner decision);
+    older history in a document stays off the calendar."""
+    return date(today.year, 1, 1)
+
+
 def extract_events(pages: list[tuple[int, str]], today: date, document_title: str) -> list[ExtractedEvent]:
-    """Events from today on, each from a sentence with an event word.
+    """Events from 1 January of this year on, each from a sentence with an
+    event word. Past ones are kept too: the calendar shows them as history.
 
     The same date range appears once per document (its first mention).
     """
+    earliest = earliest_date(today)
     events: list[ExtractedEvent] = []
     seen: set[tuple[date, date | None]] = set()
 
@@ -184,7 +193,7 @@ def extract_events(pages: list[tuple[int, str]], today: date, document_title: st
             dates = find_dates(sentence, today)
             spans = [span for _, _, span in dates]
             for starts_at, ends_at, _span in dates:
-                if (ends_at or starts_at) < today or (starts_at, ends_at) in seen:
+                if (ends_at or starts_at) < earliest or (starts_at, ends_at) in seen:
                     continue
                 seen.add((starts_at, ends_at))
                 events.append(

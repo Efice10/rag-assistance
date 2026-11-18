@@ -86,6 +86,19 @@ describe('visibility', function () {
             ->and(titlesFrom($this->getJson('/api/events?from=2026-12-02&to=2026-12-05')))->toBe(['Meeting from Public Memo']);
     });
 
+    it('shows past events added automatically, marked as such, and never as reminders', function () {
+        eventFor($this->publicDoc, ['title' => 'Safety audit', 'starts_at' => '2026-11-03', 'ends_at' => null, 'confirmed_by' => null]);
+        $reviewed = eventFor($this->publicDoc, ['title' => 'Reviewed one', 'starts_at' => '2026-11-05', 'ends_at' => null]);
+        $reviewed->forceFill(['confirmed_by' => $this->manager->id])->save();
+        Sanctum::actingAs($this->staff);
+
+        $events = collect($this->getJson('/api/events?from=2026-11-01&to=2026-11-30')->assertOk()->json('data'))->keyBy('title');
+
+        expect($events['Safety audit']['auto_confirmed'])->toBeTrue()
+            ->and($events['Reviewed one']['auto_confirmed'])->toBeFalse()
+            ->and(titlesFrom($this->getJson('/api/events/upcoming')))->not->toContain('Safety audit');
+    });
+
     it('answers 404 for dismissing an event the user cannot see', function () {
         $restricted = DocumentEvent::where('clearance_level', 4)->sole();
         Sanctum::actingAs($this->staff);

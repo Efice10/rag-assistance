@@ -86,6 +86,8 @@ export interface CalendarEvent {
   starts_at: string;
   ends_at: string | null;
   status: "pending" | "confirmed" | "rejected";
+  /** Went onto the calendar without review because it was already over. */
+  auto_confirmed?: boolean;
   clearance_level: number;
   document: { id: number; title: string } | null;
   department: NamedRef | null;

@@ -60,8 +60,12 @@ def test_an_event_needs_an_event_word():
     assert len(extract("The budget meeting is on 1 January 2027.")) == 1
 
 
-def test_past_dates_are_ignored_but_ongoing_ranges_are_kept():
-    assert extract("The audit was on 3 November 2026.") == []
+def test_past_dates_from_this_year_are_kept_older_ones_are_not():
+    assert [e.starts_at for e in extract("The audit was on 3 November 2026.")] == [date(2026, 11, 3)]
+    assert [e.starts_at for e in extract("The audit was on 2 January 2026.")] == [date(2026, 1, 2)]
+    assert extract("The audit was on 31 December 2025.") == []
+    # A range that started last year but ends this year still counts.
+    assert len(extract("The review ran 29 December 2025 to 5 January 2026.")) == 1
     ongoing = extract("The audit runs 16-20 November 2026.")
     assert [(e.starts_at, e.ends_at) for e in ongoing] == [(date(2026, 11, 16), date(2026, 11, 20))]
 
@@ -174,6 +178,33 @@ def test_new_events_are_pending_and_carry_the_document_scope(monkeypatch):
     assert row[:4] == (20, 7, 3, 2)          # document, organization, department, clearance
     assert row[11] == "pending" and row[12] is None
     assert ("DELETE FROM document_events WHERE document_id = %s", (20,)) in cursor.statements
+
+
+def test_past_events_go_straight_onto_the_calendar_future_ones_wait(monkeypatch):
+    cursor = RecordingCursor()
+    capture_inserts(monkeypatch, cursor)
+    past = ExtractedEvent("Safety audit", "Safety audit on 3 November 2026.", 1, date(2026, 11, 3), None)
+    running = ExtractedEvent("Audit week", "Audit 16-20 November 2026.", 1, date(2026, 11, 16), date(2026, 11, 20))
+
+    store_events(cursor, request(today=date(2026, 11, 18)), [past, running, event(3)])
+
+    status = {row[9]: (row[11], row[12], row[13] is not None) for row in cursor.inserted}
+    # (status, confirmed_by, has confirmed_at)
+    assert status[date(2026, 11, 3)] == ("confirmed", None, True)    # over: automatic
+    assert status[date(2026, 11, 16)] == ("pending", None, False)    # still running: reviewed
+    assert status[date(2026, 12, 3)] == ("pending", None, False)     # future: reviewed
+
+
+def test_a_rejected_past_event_stays_rejected(monkeypatch):
+    cursor = RecordingCursor(decided=[
+        (date(2026, 11, 3), None, "rejected", "noise", date(2026, 11, 3), None, 11, datetime(2026, 11, 4)),
+    ])
+    capture_inserts(monkeypatch, cursor)
+    past = ExtractedEvent("Safety audit", "Safety audit on 3 November 2026.", 1, date(2026, 11, 3), None)
+
+    store_events(cursor, request(today=date(2026, 11, 18)), [past])
+
+    assert cursor.inserted[0][11] == "rejected"
 
 
 def test_reindex_keeps_decisions_for_unchanged_dates_and_drops_the_rest(monkeypatch):

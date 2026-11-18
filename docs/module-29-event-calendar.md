@@ -8,6 +8,7 @@ Proposed 2026-11-18. **Status: built 2026-11-18** and verified on the live datab
 - **"Today"** is computed in Laravel in `CALENDAR_TIMEZONE` (default `Asia/Kuala_Lumpur`), because the app's timestamps are UTC; it is sent to the AI service with each ingest.
 - **Review decisions survive re-indexing** by matching on new `extracted_starts_at` / `extracted_ends_at` columns, so a reviewer's date correction does not break the match.
 - **The pending list** is `GET /api/events/pending` (admins and managers), not under `/api/admin/`, because managers review too.
+- **Calendar colours** (owner, 2026-11-18): chips are green for past, red for today (including a multi-day event running today) and yellow for upcoming, with a colour key; clearance shows in the event detail instead. Past dates of the current year are extracted and confirmed automatically; existing documents pick this up only when re-indexed.
 - **Tests:** pytest 27 new (extraction and storage), Pest 16, Playwright 4. Live check: extraction skipped an effective date and a TBC date; another department saw nothing; re-index kept a corrected confirmation and a rejection; a new version sent only the moved meeting back to review.
 
 Part of [roadmap-phase-2.md](roadmap-phase-2.md) as module 29. Related modules:
@@ -42,9 +43,9 @@ Turn dated memos into calendar events. Dates mentioned in uploaded documents (fo
 
 | Question | Decision |
 |---|---|
-| Which dates become events? | **Future dates near event words** only (meeting, training, deadline, due, briefing, audit, and similar). Effective dates, validity periods and past dates are not events. |
+| Which dates become events? | **Dates from 1 January of the current year near event words** (meeting, training, deadline, due, briefing, audit, and similar). Effective dates and validity periods are not events. *(Changed 2026-11-18: past dates of this year are now kept.)* |
 | Who reviews extracted events? | **Admins**, for their whole organization, and **managers**, for their own department (only events they can see). |
-| Can events skip review? | **No.** Every extracted event waits for a person to confirm it. |
+| Can events skip review? | **Only past ones.** An event already over when its document is indexed goes straight onto the calendar as history (no reviewer recorded). Everything from today on waits for a person to confirm it. *(Changed 2026-11-18.)* |
 | Who sees an event? | **Exactly the people who can see its source document.** No widening, not even by admins. |
 | What happens on re-index or a new version? | **Confirmed and rejected decisions are kept** when the same dates are still in the document (with any title or date corrections). Only new or changed dates go to review; dates that disappeared are removed. |
 | Times of day? | **Dates only** for now (all-day events). A time written in the memo stays visible in the snippet. |

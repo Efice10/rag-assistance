@@ -2,7 +2,7 @@
 
 import { Check, ChevronLeft, ChevronRight, FileText, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CLEARANCE_STYLES, ClearanceBadge } from "@/components/Badges";
+import { ClearanceBadge } from "@/components/Badges";
 import { SourceViewer } from "@/components/SourceViewer";
 import { api, errorMessage } from "@/lib/api";
 import { formatRange, parseDay, refreshUpcoming, toDay, useUpcoming } from "@/lib/events";
@@ -38,6 +38,21 @@ function shiftMonth(month: string, delta: number): string {
 function onDay(event: CalendarEvent, day: string): boolean {
   return event.starts_at <= day && (event.ends_at ?? event.starts_at) >= day;
 }
+
+type Timing = "past" | "today" | "future";
+
+/** Over, happening today (a multi-day event running today counts), or still to come. */
+function timingOf(event: CalendarEvent, today: string): Timing {
+  if ((event.ends_at ?? event.starts_at) < today) return "past";
+  return event.starts_at <= today ? "today" : "future";
+}
+
+/** Owner's colour scheme: green past, red today, yellow future. */
+const TIMING: Record<Timing, { label: string; chip: string; swatch: string }> = {
+  past: { label: "Past", chip: "bg-emerald-50 text-emerald-800 ring-emerald-600/25", swatch: "bg-emerald-500" },
+  today: { label: "Today", chip: "bg-rose-50 text-rose-800 ring-rose-600/40 font-semibold", swatch: "bg-rose-500" },
+  future: { label: "Upcoming", chip: "bg-amber-50 text-amber-900 ring-amber-600/40", swatch: "bg-amber-400" },
+};
 
 export default function CalendarPage() {
   const session = useSession();
@@ -86,7 +101,8 @@ export default function CalendarPage() {
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Calendar</h1>
           <p className="text-sm text-slate-600">
-            Meetings, deadlines and trainings found in the documents you can see, confirmed by a reviewer.
+            Meetings, deadlines and trainings found in the documents you can see. Upcoming ones are confirmed by a
+            reviewer; past ones from this year are added as history.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -129,6 +145,14 @@ export default function CalendarPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <section aria-label={`Events in ${title}`} className="overflow-x-auto">
+          <ul className="mb-2 flex flex-wrap items-center gap-4 text-xs text-slate-600" aria-label="Colour key" data-testid="legend">
+            {(Object.keys(TIMING) as Timing[]).map((timing) => (
+              <li key={timing} className="flex items-center gap-1.5">
+                <span className={`h-2.5 w-2.5 rounded-sm ${TIMING[timing].swatch}`} aria-hidden />
+                {TIMING[timing].label}
+              </li>
+            ))}
+          </ul>
           <div className="min-w-[560px] rounded-xl border border-slate-200 bg-white shadow-sm" data-testid="month-grid">
             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-medium uppercase tracking-wide text-slate-500">
               {WEEKDAYS.map((weekday) => (
@@ -168,17 +192,20 @@ export default function CalendarPage() {
                       {date.getDate()}
                     </span>
                     <span className="mt-1 block space-y-0.5">
-                      {items.slice(0, 3).map((event) => (
-                        <span
-                          key={event.id}
-                          data-testid="event-chip"
-                          className={`block truncate rounded px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
-                            CLEARANCE_STYLES[event.clearance_level] ?? "bg-slate-100 text-slate-700 ring-slate-500/20"
-                          }`}
-                        >
-                          {event.title}
-                        </span>
-                      ))}
+                      {items.slice(0, 3).map((event) => {
+                        const timing = timingOf(event, today);
+                        return (
+                          <span
+                            key={event.id}
+                            data-testid="event-chip"
+                            data-timing={timing}
+                            title={`${TIMING[timing].label}: ${event.title}`}
+                            className={`block truncate rounded px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${TIMING[timing].chip}`}
+                          >
+                            {event.title}
+                          </span>
+                        );
+                      })}
                       {items.length > 3 && <span className="block text-[11px] text-slate-500">+{items.length - 3} more</span>}
                     </span>
                   </button>
@@ -210,6 +237,17 @@ export default function CalendarPage() {
   );
 }
 
+function TimingBadge({ timing }: { timing: Timing }) {
+  return (
+    <span
+      data-testid="timing-badge"
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${TIMING[timing].chip}`}
+    >
+      {TIMING[timing].label}
+    </span>
+  );
+}
+
 function EventDetail({
   day,
   events,
@@ -223,6 +261,8 @@ function EventDetail({
   onSelect: (event: CalendarEvent | null) => void;
   onOpenSource: (source: Source) => void;
 }) {
+  const today = toDay(new Date());
+
   if (!day) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
@@ -248,12 +288,20 @@ function EventDetail({
                 aria-expanded={selected?.id === event.id}
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-left hover:bg-slate-50"
               >
-                <span className="block text-sm font-medium text-slate-900">{event.title}</span>
+                <span className="flex items-start justify-between gap-2">
+                  <span className="block text-sm font-medium text-slate-900">{event.title}</span>
+                  <TimingBadge timing={timingOf(event, today)} />
+                </span>
                 <span className="block text-xs text-slate-500">{formatRange(event.starts_at, event.ends_at)}</span>
               </button>
               {selected?.id === event.id && (
                 <div className="mt-2 space-y-2 px-1 text-sm">
                   <p className="text-slate-600">&ldquo;{event.snippet}&rdquo;</p>
+                  {event.auto_confirmed && (
+                    <p className="text-xs text-slate-500" data-testid="auto-confirmed">
+                      Added automatically: the date had already passed when the document was indexed.
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <ClearanceBadge level={event.clearance_level} />
                     {event.department && <span className="text-xs text-slate-500">{event.department.name}</span>}
