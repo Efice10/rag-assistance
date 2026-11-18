@@ -14,4 +14,8 @@ export async function stubBackgroundCalls(page: Page) {
     route.fulfill({ json: { data: [], meta: { days: 7, today: "2026-11-18", pending_review: null } } }),
   );
   await page.route("**/api/admin/settings", (route) => route.fulfill({ json: { data: { event_reminder_days: 7 } } }));
+  // The viewer asks for a preview first; by default every document is a PDF.
+  await page.route("**/api/documents/*/preview", (route) =>
+    route.fulfill({ json: { data: { format: "pdf", pages: [], truncated: false } } }),
+  );
 }

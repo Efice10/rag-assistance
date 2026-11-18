@@ -37,7 +37,7 @@ The browser only ever talks to Laravel. The AI service listens on `127.0.0.1` an
 |---|---|
 | Chat | Streaming answers with `[Title, Page N]` citations; only the documents the answer actually cites are listed as sources. Follow-up questions keep the conversation's context. |
 | Conversation history | Every turn is saved for the user who asked it. Answers that cited a document the user can no longer access (lowered clearance, department move) are withheld, on screen and in follow-up context. |
-| Citation viewer | A citation opens the PDF at the cited page in a side panel, through the same access-checked download route. |
+| Document viewer | Any document opens in a side panel without downloading it: from the Documents page (**View**, or click the title), from a chat citation, or from a calendar event. PDFs show in the browser's viewer at the cited page; Word, Excel, PowerPoint, text and Markdown show as readable text, page by page (slides, sheets), scrolled to the cited one. Access is re-checked on every open. |
 | Answer feedback | Thumbs up/down with an optional comment; thumbs-down answers surface on the analytics page as evaluation candidates. |
 | Documents | PDF, DOCX, XLSX (a page per sheet), PPTX (a page per slide), TXT, MD. Re-uploading the same title in the same department creates a new version; the old one keeps answering until the new one is indexed. Reindex on demand. |
 | Hybrid search | Codes, numbers and acronyms in the question (`PO-2024-11`, `10,000`, `KYC`) also run a scoped full-text search, fused with the vector search by reciprocal-rank fusion. |
@@ -164,12 +164,12 @@ To see the isolation working: upload a Confidential document as `manager@acme.te
 ## Tests
 
 ```powershell
-# Backend: 125 Pest tests, in-memory SQLite, no external services needed
+# Backend: 130 Pest tests, in-memory SQLite, no external services needed
 cd backend
 php vendor\bin\pest
 php vendor\bin\pest --filter="chat scope"          # a single group
 
-# AI service: 97 pytest tests, no database or Ollama needed (the real-OCR test runs only where Tesseract is installed)
+# AI service: 102 pytest tests, no database or Ollama needed (the real-OCR test runs only where Tesseract is installed)
 cd ..\ai-service
 .\venv\Scripts\python.exe -m pytest
 .\venv\Scripts\python.exe -m pytest -k "admin"     # a single test
@@ -210,6 +210,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs all three suites and the struct
 | GET | `/api/documents` | signed in | Current versions within the user's scope (`?include_superseded=1` for older ones) |
 | POST | `/api/documents` | admin, manager | Upload PDF/DOCX/XLSX/PPTX/TXT/MD (20 MB max); same title = new version; queues ingestion |
 | GET | `/api/documents/{id}/download` | signed in | Download, re-checking scope |
+| GET | `/api/documents/{id}/preview` | signed in | Text of a non-PDF document, page by page, for the in-app viewer; `format: pdf` for PDFs; re-checks scope |
 | POST | `/api/documents/{id}/reindex` | admin, manager in scope | Queue the document again |
 | POST | `/api/documents/{id}/approve` | admin | Release a document held for review (audited) |
 | POST | `/api/chat` | signed in, 20/min | Streams the answer as Server-Sent Events; `conversation_id` for a follow-up |
@@ -237,7 +238,7 @@ Chat stream events: `token` (`{"text"}`), `sources` (`{"sources":[{document_id, 
 ## Known limits
 
 - DOCX, TXT and MD files have no fixed pages, so their citations read "Page 1"; slides and sheets are cited by number.
-- Only PDFs open in the citation viewer; other formats download.
+- Non-PDF documents open in the viewer as text only: formatting, tables' layout and images are not shown (Download gives the original). Very long documents are cut after about 300,000 characters in the viewer.
 - OCR needs Tesseract plus `requirements-ocr.txt`; without them, scanned PDFs fail with an explanation and can be reindexed later.
 - Injection screening is heuristic: it catches common phrasings, not every attack. The prompt-level data wrapping is the second line of defense.
 - PII masking applies to the search index and answers, not the stored file, which authorized users can still download.

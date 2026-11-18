@@ -44,6 +44,20 @@ class AiServiceClient
             ->getBody();
     }
 
+    /**
+     * The text of a stored file, page by page, for the in-app viewer.
+     *
+     * @return array{pages: list<array{page: int, text: string}>, truncated: bool}
+     */
+    public function preview(string $absolutePath): array
+    {
+        return $this->request()
+            ->timeout(60)
+            ->post('/preview', ['file_path' => $absolutePath])
+            ->throw()
+            ->json();
+    }
+
     private function request(): PendingRequest
     {
         return Http::baseUrl(rtrim((string) config('services.ai.url'), '/'))

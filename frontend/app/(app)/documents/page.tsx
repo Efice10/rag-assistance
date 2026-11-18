@@ -1,8 +1,9 @@
 "use client";
 
-import { Download, FileText, Loader2, RefreshCw, ShieldCheck, Upload } from "lucide-react";
+import { Download, Eye, FileText, Loader2, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ClearanceBadge, StatusBadge } from "@/components/Badges";
+import { SourceViewer, type ViewerTarget } from "@/components/SourceViewer";
 import { UploadModal } from "@/components/UploadModal";
 import { api, downloadDocument, errorMessage } from "@/lib/api";
 import { confirmAction, toast } from "@/lib/feedback";
@@ -19,6 +20,7 @@ export default function DocumentsPage() {
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [actingId, setActingId] = useState<number | null>(null);
   const [showOlder, setShowOlder] = useState(false);
+  const [viewing, setViewing] = useState<ViewerTarget | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -155,7 +157,13 @@ export default function DocumentsPage() {
                 <tr key={doc.id} data-testid="document-row">
                   <td className="px-4 py-3">
                     <p className={`font-medium ${doc.superseded ? "text-slate-500" : "text-slate-900"}`}>
-                      {doc.title}
+                      <button
+                        type="button"
+                        onClick={() => setViewing({ document_id: doc.id, document_title: doc.title })}
+                        className="text-left underline-offset-2 hover:text-indigo-700 hover:underline"
+                      >
+                        {doc.title}
+                      </button>
                       {doc.version > 1 && (
                         <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
                           v{doc.version}
@@ -209,6 +217,14 @@ export default function DocumentsPage() {
                     )}
                     <button
                       type="button"
+                      onClick={() => setViewing({ document_id: doc.id, document_title: doc.title })}
+                      aria-label={`View ${doc.title}`}
+                      className="mr-1.5 inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+                    >
+                      <Eye className="h-3.5 w-3.5" aria-hidden /> View
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => download(doc)}
                       disabled={downloadingId === doc.id}
                       className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
@@ -227,6 +243,8 @@ export default function DocumentsPage() {
           </table>
         )}
       </div>
+
+      {viewing && <SourceViewer source={viewing} onClose={() => setViewing(null)} />}
 
       {uploading && user && (
         <UploadModal

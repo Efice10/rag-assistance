@@ -6,11 +6,13 @@ use App\Http\Requests\StoreDocumentRequest;
 use App\Jobs\ProcessDocumentJob;
 use App\Models\AuditLog;
 use App\Models\Document;
+use App\Services\AiServiceClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class DocumentController extends Controller
 {
@@ -85,6 +87,38 @@ class DocumentController extends Controller
             Str::slug($document->title).'.'.$extension,
             ['Content-Type' => $document->mime_type],
         );
+    }
+
+    /**
+     * Readable text of a document, for viewing it in the app without
+     * downloading it. The same access rule as download (404 outside the
+     * user's scope). PDFs are shown by the browser from the download route,
+     * so they only report their format here.
+     */
+    public function preview(Request $request, AiServiceClient $ai, int $document): JsonResponse
+    {
+        $document = Document::query()->visibleTo($request->user())->findOrFail($document);
+
+        abort_unless(Storage::disk()->exists($document->file_path), 404, 'The stored file is missing.');
+
+        $extension = strtolower(pathinfo($document->file_path, PATHINFO_EXTENSION));
+
+        if ($extension === 'pdf') {
+            return response()->json(['data' => ['format' => 'pdf', 'pages' => [], 'truncated' => false]]);
+        }
+
+        try {
+            $preview = $ai->preview(Storage::disk()->path($document->file_path));
+        } catch (Throwable $e) {
+            report($e);
+            abort(502, 'The preview could not be prepared. Download the document instead.');
+        }
+
+        return response()->json(['data' => [
+            'format' => $extension,
+            'pages' => $preview['pages'] ?? [],
+            'truncated' => (bool) ($preview['truncated'] ?? false),
+        ]]);
     }
 
     /**

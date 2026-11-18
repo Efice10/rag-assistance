@@ -38,6 +38,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/documents', [DocumentController::class, 'store']);
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])
         ->whereNumber('document');
+    Route::get('/documents/{document}/preview', [DocumentController::class, 'preview'])->whereNumber('document');
     Route::post('/documents/{document}/reindex', [DocumentController::class, 'reindex'])->whereNumber('document');
     Route::post('/documents/{document}/approve', [DocumentController::class, 'approve'])->whereNumber('document');
 
