@@ -28,6 +28,10 @@ class AuditLog extends Model
 
     public const ACTION_DOCUMENT_APPROVED = 'document.approved';
 
+    public const ACTION_SSO_UPDATED = 'sso.updated';
+
+    public const ACTION_USER_PROVISIONED = 'user.provisioned';
+
     protected $fillable = [
         'organization_id',
         'user_id',

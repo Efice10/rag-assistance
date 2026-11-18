@@ -1,8 +1,8 @@
 # Multi-Tenant Enterprise Knowledge & Compliance Assistant
 
-An internal document Q&A platform. Organizations upload SOPs, policies and manuals (PDF/DOCX) tagged with a **department** and a **security clearance level**; employees ask questions in a streaming chat and get answers that cite the document and page they came from.
+An internal document Q&A platform. Organizations upload SOPs, policies and manuals (PDF, Word, Excel, PowerPoint, text) tagged with a **department** and a **security clearance level**; employees ask questions in a streaming chat and get answers that cite the document and page they came from.
 
-Access control is enforced **inside the vector search query**, so a user can never retrieve, or infer the existence of, a document outside their organization, department or clearance.
+Access control is enforced **inside the search query**, so a user can never retrieve, or infer the existence of, a document outside their organization, department or clearance. A golden evaluation set proves it on every CI run.
 
 Runs natively on Windows: no Docker, no WSL.
 
@@ -15,38 +15,62 @@ flowchart LR
     BE -->|queue job| R[(Redis / Memurai<br/>:6379)]
     R --> W[Queue worker]
     W -->|POST /ingest<br/>X-Internal-Secret| AI[FastAPI AI service<br/>:8001]
-    BE -->|POST /query<br/>trusted scope + secret| AI
+    BE -->|POST /query<br/>trusted scope + history + secret| AI
     AI -->|embeddings + chat| O[Ollama<br/>:11434]
-    AI -->|RBAC-filtered<br/>vector search| DB[(Supabase PostgreSQL<br/>+ pgvector)]
+    AI -->|RBAC-filtered hybrid<br/>vector + keyword search| DB[(Supabase PostgreSQL<br/>+ pgvector)]
     BE --> DB
+    FE -. optional OIDC .-> IDP[Organization identity provider]
+    BE -. code exchange .-> IDP
 ```
 
 | Service | Stack | Port | Responsibility |
 |---|---|---|---|
-| `backend/` | Laravel 13, Sanctum, Predis, Pest | 8000 | Auth, RBAC, uploads, queue, chat proxy, audit logs |
-| `ai-service/` | FastAPI, pypdf, python-docx, pgvector, Ollama | 8001 | Chunking, embeddings, RBAC-filtered retrieval, streamed answers |
-| `frontend/` | Next.js 16 (App Router), TypeScript, Tailwind 4, Playwright | 3000 | Login, documents dashboard, chat, audit log viewer |
+| `backend/` | Laravel 13, Sanctum, Predis, Pest | 8000 | Auth and SSO, RBAC, user management, uploads and versions, queue, chat proxy and history, audit logs, analytics |
+| `ai-service/` | FastAPI, pypdf, python-docx, pgvector, Ollama | 8001 | Extraction, injection screening, PII redaction, chunking, embeddings, hybrid retrieval, streamed answers, evaluation |
+| `frontend/` | Next.js 16 (App Router), TypeScript, Tailwind 4, Playwright | 3000 | Login, chat with history, documents, users, analytics, processing, audit log |
 
 The browser only ever talks to Laravel. The AI service listens on `127.0.0.1` and rejects any request without the shared secret.
+
+## Features
+
+| Area | What it does |
+|---|---|
+| Chat | Streaming answers with `[Title, Page N]` citations; only the documents the answer actually cites are listed as sources. Follow-up questions keep the conversation's context. |
+| Conversation history | Every turn is saved for the user who asked it. Answers that cited a document the user can no longer access (lowered clearance, department move) are withheld, on screen and in follow-up context. |
+| Citation viewer | A citation opens the PDF at the cited page in a side panel, through the same access-checked download route. |
+| Answer feedback | Thumbs up/down with an optional comment; thumbs-down answers surface on the analytics page as evaluation candidates. |
+| Documents | PDF, DOCX, XLSX (a page per sheet), PPTX (a page per slide), TXT, MD. Re-uploading the same title in the same department creates a new version; the old one keeps answering until the new one is indexed. Reindex on demand. |
+| Hybrid search | Codes, numbers and acronyms in the question (`PO-2024-11`, `10,000`, `KYC`) also run a scoped full-text search, fused with the vector search by reciprocal-rank fusion. |
+| Document-trust defenses | Text that tries to steer the model ("ignore previous instructions") is held for admin approval and not indexed; emails, phone numbers, NRIC and card numbers are masked before embedding; excerpts reach the model wrapped as data. |
+| OCR | Scanned PDF pages are OCR'd when Tesseract is installed (optional). |
+| Users and departments | Admins create, edit, deactivate and reactivate users and manage departments in their own organization. |
+| Single sign-on | Per-organization OpenID Connect (authorization code + PKCE). First-time users are created at the configured department, role and clearance (Internal at most). Password sign-in stays as break-glass. |
+| Analytics | Questions per day, people asking, no-answer rate, helpful rate, most-cited documents, documents by clearance. |
+| Processing | Failed documents, documents stuck waiting for a worker, and failed queue jobs (organization-scoped), with retry. |
+| Audit log | Every prompt and every admin change, append-only, searchable, exportable as CSV. |
+| Evaluation | A golden question set scored for answers, citations, refusals and RBAC safety, in CI and against the live stack. |
 
 ## Security model
 
 | Rule | Where it is enforced |
 |---|---|
-| Users only see their own organization | `Document::scopeVisibleTo()` and the `WHERE organization_id = %s` clause in `ai-service/rag.py` |
-| Non-admins only see their own department | Same two places; admins drop the department filter but stay inside their organization |
+| Users only see their own organization | `Document::scopeVisibleTo()` and `scope_filter()` in `ai-service/rag.py`, applied to every branch of the hybrid query |
+| Non-admins only see their own department | Same places; admins drop the department filter but stay inside their organization |
 | Clearance: a user at level N sees levels 1 to N | `clearance_level <= %s` in both places (1 Public, 2 Internal, 3 Confidential, 4 Restricted) |
-| Scope is never taken from the client | `ChatController` builds it from the authenticated user via `User::retrievalScope()`; `ChatRequest` validates only `prompt` |
-| Out-of-scope documents return 404, not 403 | `DocumentController::download()` |
+| Scope is never taken from the client | `ChatController` builds it from the authenticated user via `User::retrievalScope()`; `ChatRequest` validates only `prompt` and the user's own `conversation_id` |
+| Out-of-scope documents return 404, not 403 | `DocumentController`, `ConversationController`, `UserPolicy` |
+| Saved history obeys today's access | `Conversation::messagesVisibleTo()` re-checks cited documents on every read and before sending history to the model |
 | AI service is internal | `X-Internal-Secret` header checked with a constant-time compare |
 | Audit log is append-only | Eloquent model guards plus database triggers on `audit_logs` (PostgreSQL and SQLite) |
-| No answer without evidence | Retrieval below the similarity threshold returns a fixed refusal without calling the model |
-| Admins manage only their own organization | `UserPolicy` and `SaveDepartmentRequest`; another organization's user or department returns 404 |
-| Users are deactivated, never deleted | `users.deactivated_at`; deactivation revokes tokens, login refuses, and the `active` middleware rejects any remaining token |
+| No answer without evidence | Retrieval below the similarity threshold (and without an exact-term match) returns a fixed refusal without calling the model |
+| Uploaded text is untrusted | Injection screening holds suspicious documents (`flagged`) until an admin approves, audited; PII is masked in the index; excerpts are wrapped in `<document>` tags the text cannot close |
+| Admins manage only their own organization | `UserPolicy`, `SaveDepartmentRequest`, org filters on processing, metrics, export and SSO settings |
+| Users are deactivated, never deleted | `users.deactivated_at`; deactivation revokes tokens, login and SSO refuse, and the `active` middleware rejects any remaining token |
 | An organization always keeps an admin | Admins cannot change their own role or deactivate themselves |
-| Admin changes are audited | Every user and department change writes an `audit_logs` row (`user.*`, `department.*`) |
+| SSO cannot take over accounts | The email must be verified and in the connection's domain; an existing account in another organization, or linked to another identity, is refused; state is single-use |
+| CSV export cannot carry formulas | Cells starting with `= + - @` are prefixed with `'` |
 
-Roles: **admin** (all departments in their organization, uploads, user and department management, audit logs), **manager** (own department, uploads up to their clearance), **staff** (own department, read and chat only).
+Roles: **admin** (all departments in their organization, uploads, approvals, user and SSO management, analytics, processing, audit logs), **manager** (own department, uploads and reindex up to their clearance), **staff** (own department, read and chat only).
 
 ## Prerequisites
 
@@ -59,6 +83,7 @@ Roles: **admin** (all departments in their organization, uploads, user and depar
 | Ollama | `ollama pull nomic-embed-text` and `ollama pull llama3.2` |
 | Redis on `127.0.0.1:6379` | Memurai Developer, or Laragon's bundled Redis |
 | Supabase project | Free tier; pgvector is enabled by the migrations |
+| Tesseract (optional) | Only for OCR of scanned PDFs, see below |
 
 ## Setup
 
@@ -84,7 +109,21 @@ npm install
 copy .env.example .env.local
 ```
 
-Use the **Session pooler** connection string from Supabase (port 5432). The transaction pooler (port 6543) does not support the prepared statements Laravel uses.
+Use the **Session pooler** connection string from Supabase (port 5432) with `?sslmode=require`. The transaction pooler (port 6543) does not support the prepared statements Laravel uses.
+
+### Optional: OCR for scanned PDFs
+
+```powershell
+winget install UB-Mannheim.TesseractOCR
+cd ai-service
+.\venv\Scripts\python.exe -m pip install -r requirements-ocr.txt
+```
+
+Restart the AI service, then use **Reindex** on any document that failed with "No extractable text". Set `TESSERACT_CMD` in `ai-service/.env` if Tesseract is not in `C:\Program Files\Tesseract-OCR`.
+
+### Optional: single sign-on
+
+Sign in as an admin, open **Users → Single sign-on**, enter the provider's issuer URL, client ID and secret, the email domain, and the defaults for new accounts. Register the redirect URI shown there (`SSO_REDIRECT_URI`, by default `http://localhost:3000/sso/callback`) with the provider.
 
 ## Running (four terminals)
 
@@ -103,7 +142,7 @@ uvicorn main:app --reload --port 8001
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. The queue worker keeps code in memory: restart it after changing backend job code.
 
 ### Demo accounts
 
@@ -124,32 +163,39 @@ To see the isolation working: upload a Confidential document as `manager@acme.te
 ## Tests
 
 ```powershell
-# Backend: 59 Pest tests, in-memory SQLite, no external services needed
+# Backend: 109 Pest tests, in-memory SQLite, no external services needed
 cd backend
 php vendor\bin\pest
 php vendor\bin\pest --filter="chat scope"          # a single group
 
-# AI service: 17 pytest tests, no database or Ollama needed
+# AI service: 63 pytest tests, no database or Ollama needed
 cd ..\ai-service
 .\venv\Scripts\python.exe -m pytest
 .\venv\Scripts\python.exe -m pytest -k "admin"     # a single test
+
+# RAG evaluation (golden set in ai-service/eval/golden.jsonl)
+.\venv\Scripts\python.exe -m eval.run_eval --structural   # in-process, as CI runs it
+.\venv\Scripts\python.exe -m eval.run_eval --live         # against the running AI service + Supabase + Ollama
+# Reports: ai-service/eval/reports/<mode>-latest.md and .json; exit code 1 on any RBAC violation
 
 # Frontend: Playwright, Laravel API stubbed in the browser
 cd ..\frontend
 npx playwright install chromium                     # first time only
 npx playwright test
 
-# Same Playwright flow against the real running stack (all four terminals up, seeded)
+# The sign-in/upload/chat flow against the real running stack (all four terminals up, seeded)
 $env:E2E_LIVE = "1"; npx playwright test
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) runs all three suites on every push and pull request to `main`.
+GitHub Actions (`.github/workflows/ci.yml`) runs all three suites and the structural evaluation on every push and pull request to `main`.
 
 ## API
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
 | POST | `/api/login` | public | Returns a Sanctum token and the user profile |
+| POST | `/api/sso/start` | public | Authorization URL for the email domain's identity provider |
+| POST | `/api/sso/callback` | public | Exchange the provider's code; signs in (and provisions) the user |
 | POST | `/api/logout` | signed in | Revokes the current token |
 | GET | `/api/me` | signed in | Current profile |
 | GET | `/api/departments` | signed in | Departments the user may upload to (admins also get user and document counts) |
@@ -160,17 +206,33 @@ GitHub Actions (`.github/workflows/ci.yml`) runs all three suites on every push 
 | PUT | `/api/users/{id}` | admin | Edit name, email, role, department, clearance, or reset the password |
 | PUT | `/api/users/{id}/deactivate` | admin | Block sign-in and revoke tokens (not self) |
 | PUT | `/api/users/{id}/reactivate` | admin | Restore access |
-| GET | `/api/documents` | signed in | Documents within the user's scope |
-| POST | `/api/documents` | admin, manager | Upload a PDF/DOCX (20 MB max); queues ingestion |
+| GET | `/api/documents` | signed in | Current versions within the user's scope (`?include_superseded=1` for older ones) |
+| POST | `/api/documents` | admin, manager | Upload PDF/DOCX/XLSX/PPTX/TXT/MD (20 MB max); same title = new version; queues ingestion |
 | GET | `/api/documents/{id}/download` | signed in | Download, re-checking scope |
-| POST | `/api/chat` | signed in, 20/min | Streams the answer as Server-Sent Events |
+| POST | `/api/documents/{id}/reindex` | admin, manager in scope | Queue the document again |
+| POST | `/api/documents/{id}/approve` | admin | Release a document held for review (audited) |
+| POST | `/api/chat` | signed in, 20/min | Streams the answer as Server-Sent Events; `conversation_id` for a follow-up |
+| GET | `/api/conversations` | signed in | The user's own conversations |
+| GET | `/api/conversations/{id}` | owner | Messages, with withheld answers masked |
+| DELETE | `/api/conversations/{id}` | owner | Delete a conversation (the audit log keeps the prompts) |
+| POST | `/api/messages/{id}/feedback` | owner | Rate an answer `{helpful, comment?}`; re-rating replaces |
 | GET | `/api/audit-logs` | admin | Paginated, searchable log for the organization |
+| GET | `/api/audit-logs/export` | admin | The same filtered log as CSV |
+| GET | `/api/admin/metrics` | admin | Analytics for `?days=` (1 to 365) |
+| GET | `/api/admin/processing` | admin | Failed and stuck documents, failed queue jobs |
+| POST | `/api/admin/failed-jobs/{id}/retry` | admin | Queue a failed job's document again |
+| DELETE | `/api/admin/failed-jobs/{id}` | admin | Remove a failure record |
+| GET, PUT | `/api/admin/sso` | admin | The organization's single sign-on settings (secret is write-only) |
 
-Chat stream events: `token` (`{"text"}`), `sources` (`{"sources":[{document_id, document_title, page_number}]}`), `done`, and `error` (`{"message"}`).
+Chat stream events: `token` (`{"text"}`), `sources` (`{"sources":[{document_id, document_title, page_number}]}`), `done`, and `error` (`{"message"}`), relayed unchanged from the AI service; then Laravel adds `saved` (`{"conversation_id", "title", "message_id"}`).
 
 ## Known limits
 
-- DOCX files have no fixed pages, so their citations always read "Page 1".
-- Scanned PDFs without a text layer cannot be indexed (no OCR); they are marked failed with an explanation.
+- DOCX, TXT and MD files have no fixed pages, so their citations read "Page 1"; slides and sheets are cited by number.
+- Only PDFs open in the citation viewer; other formats download.
+- OCR needs Tesseract plus `requirements-ocr.txt`; without them, scanned PDFs fail with an explanation and can be reindexed later.
+- Injection screening is heuristic: it catches common phrasings, not every attack. The prompt-level data wrapping is the second line of defense.
+- PII masking applies to the search index and answers, not the stored file, which authorized users can still download.
+- SSO reads the identity from the provider's userinfo endpoint after a server-side code exchange; it does not validate the ID token signature, so the provider must be reached over HTTPS (enforced).
 - `php artisan serve` handles one request at a time on Windows, so other requests wait while an answer is streaming. Use a real web server for more than one concurrent user.
 - The AI service reads uploads from the local disk. Moving to `FILESYSTEM_DISK=s3` works for Laravel as-is, but the AI service would then need to fetch the file from S3.

@@ -3,8 +3,29 @@
 Proposed: 2026-11-16. Status of the base product: all five build phases from
 `knowledge/introduction.md` are complete and green (Pest 34/34, pytest 17/17,
 Playwright 3/3). This document lists candidate modules in the order they were
-presented, with a suggested build order at the end. Modules marked **done**
-carry a status line; the rest begin only when requested in the conversation.
+presented, with a suggested build order at the end.
+
+## Status (2026-11-18): all 15 modules built
+
+| # | Module | Notes on what was built, where it differs from the plan below |
+|---|---|---|
+| 1 | Admin users & departments | `deactivated_at` + reactivate; last-admin guard is structural (no self role change or self deactivation) |
+| 2 | Conversation history | Saved answers citing documents the user can no longer access are withheld on read and from follow-up history |
+| 3 | RAG evaluation | `ai-service/eval/`; scopes written as org slug + department name so the golden file works on any install; structural tier in CI |
+| 4 | Hybrid search | `tsv` covers title + content; keyword branch only for distinctive terms (codes, numbers, acronyms), all required (AND) |
+| 5 | Document-trust defenses | Status `flagged`, admin approve (audited), PII masking with Luhn-checked cards, `<document>` wrapping |
+| 6 | Analytics | `/analytics` page |
+| 7 | Audit CSV export | Streamed, filter-aware, formula-injection guard |
+| 8 | Citation viewer | Browser's built-in PDF viewer at `#page=N` (no pdf.js dependency) |
+| 9 | Versioning & reindex | Supersede happens inside the AI service's indexing transaction |
+| 10 | OCR | Code complete; needs Tesseract + `requirements-ocr.txt` installed by the owner |
+| 11 | More formats | XLSX/PPTX parsed with the standard library; TXT/MD |
+| 12 | Follow-up context | Retrieval embeds question + previous user question |
+| 13 | Failed jobs | Broadened to a Processing screen: failed and stuck documents plus org-scoped failed jobs |
+| 14 | Answer feedback | Thumbs-down answers listed on analytics as golden-set candidates |
+| 15 | SSO (OIDC) | Built on Laravel's HTTP client (no Socialite); PKCE, userinfo after server-side code exchange; HTTPS-only providers |
+
+The sections below are the original proposals, kept for reference.
 
 ## Ground rules (apply to every module)
 

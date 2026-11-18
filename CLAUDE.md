@@ -13,22 +13,25 @@ The application is specified in `knowledge/`. Read these before any work on it:
 
 ## Application
 
-All five build phases are written. Three decoupled services in one monorepo:
+All five build phases and all 15 modules in `ROADMAP.md` are written. Three decoupled services in one monorepo:
 
 | Service | Stack | Port | Responsibility |
 |---|---|---|---|
 | `backend/` | Laravel 13, Sanctum, Predis, Pest 4 | 8000 | Auth, RBAC, uploads, queue jobs, audit logs, chat proxy |
 | `ai-service/` | Python 3.12 FastAPI (venv in `ai-service/venv`) | 8001 | PDF/DOCX chunking, Ollama embeddings, pgvector search, SSE streaming |
-| `frontend/` | Next.js 16 App Router, TypeScript, Tailwind 4, Playwright | 3000 | Login, documents dashboard, streaming chat, audit log viewer |
+| `frontend/` | Next.js 16 App Router, TypeScript, Tailwind 4, Playwright | 3000 | Login and SSO callback, chat with history and citation viewer, documents, users, analytics, processing, audit log |
 
 Request flow: the frontend talks only to Laravel. Laravel authenticates, derives the user's scope, and calls FastAPI over internal HTTP (`/ingest` from the `ProcessDocumentJob` queue worker, `/query` from the chat proxy). FastAPI is the only service that touches `document_chunks` and Ollama.
 
 Where the cross-service rules live:
 
-- Visibility rule for documents: `Document::scopeVisibleTo()` in `backend/app/Models/Document.php`, mirrored by `build_search_query()` in `ai-service/rag.py`. Change both together.
-- Trusted scope: `User::retrievalScope()`; `ChatRequest` validates only `prompt`, so client-sent scope never reaches the AI service.
-- All Laravel-to-FastAPI calls go through `backend/app/Services/AiServiceClient.php`.
-- Chat stream contract (FastAPI to Laravel to browser, relayed unchanged): SSE events `token` `{text}`, `sources` `{sources:[{document_id, document_title, page_number}]}`, `done`, `error` `{message}`. Producers: `ai-service/rag.py`. Consumers: `ChatController` (reads `sources` and `error` for the audit record, written once after the stream ends) and `frontend/lib/sse.ts`. The frontend uses this custom parser, not the Vercel AI SDK.
+- Visibility rule for documents: `Document::scopeVisibleTo()` in `backend/app/Models/Document.php`, mirrored by `scope_filter()` in `ai-service/rag.py`, which `build_search_query()` applies to every branch of the hybrid query (vector CTE, keyword CTE, and the outer select). The structural evaluator (`ai-service/eval/run_eval.py`, `Structural.in_scope`) mirrors it a third time. Change all together.
+- Trusted scope: `User::retrievalScope()`; `ChatRequest` validates only `prompt` and a `conversation_id` the user owns, so client-sent scope never reaches the AI service.
+- All Laravel-to-FastAPI calls go through `backend/app/Services/AiServiceClient.php`. `/query` takes the scope plus `history` (last turns of the user's own conversation, already filtered by `Conversation::messagesVisibleTo()`); retrieval embeds the question plus the previous user question, never assistant text.
+- Chat stream contract (FastAPI to Laravel to browser, relayed unchanged): SSE events `token` `{text}`, `sources` `{sources:[{document_id, document_title, page_number}]}` (only documents the answer cites, see `cited_sources()`), `done`, `error` `{message}`. Producers: `ai-service/rag.py`. After the relayed stream Laravel appends its own `saved` `{conversation_id, title, message_id}`. Consumers: `ChatController` (writes one audit row, then the conversation turn) and `frontend/lib/sse.ts`. The frontend uses this custom parser, not the Vercel AI SDK.
+- Ingest outcomes (`ai-service/ingest.py`, written to `documents` by the AI service and confirmed by `ProcessDocumentJob`): `flagged` (injection heuristics in `safety.py`; nothing indexed until `POST /documents/{id}/approve` sets `approved_at`, sent as `allow_flagged`), `indexed` (PII redacted, `pii_redactions` count; older versions in `supersedes_document_ids` lose their chunks in the same transaction), `failed`. Versions are same organization + department + title, case-insensitive (`Document::olderVersions()`).
+- `document_chunks.tsv` is a generated `tsvector` over title + content (PostgreSQL only). `exact_terms()` decides when the keyword branch runs; a keyword hit bypasses `MIN_SIMILARITY`.
+- Laravel-owned admin views: `ProcessingController` (reads the shared `failed_jobs` table, matching rows to an organization by the document id in the payload, never unserializing it), `MetricsController` (aggregates in PHP so SQLite and PostgreSQL agree), `AuditLogController::export`, `SsoController` + `OidcClient` (per-organization `sso_connections`).
 - Migrations are driver-aware: the `vector` column, HNSW index and audit triggers are created on PostgreSQL; SQLite (tests) gets a plain text column and equivalent triggers.
 - Admin management (users, departments): `UserPolicy` (other-org targets answer 404), `UserController`, `DepartmentController`, `SaveDepartmentRequest`. Users are deactivated via `deactivated_at`, never deleted, because `audit_logs` references them; the `active` middleware alias (`EnsureUserIsActive`) on the authenticated route group rejects deactivated users. Admin changes are written with `AuditLog::recordAdminAction()`, description in the `prompt` column.
 - Frontend session is a `useSyncExternalStore` store in `frontend/lib/session.ts` (`undefined` = hydrating, `null` = signed out); `components/AppShell.tsx` guards every page under `app/(app)/`.
@@ -66,7 +69,11 @@ php vendor\bin\pest --filter="chat scope"           # backend/  one group or tes
 npx playwright test                                 # frontend/ (Laravel API stubbed in the browser)
 $env:E2E_LIVE = "1"; npx playwright test            # frontend/ against the real running stack
 npm run lint; npm run build                         # frontend/
+.\venv\Scripts\python.exe -m eval.run_eval --structural   # ai-service/  golden set, in-process (CI)
+.\venv\Scripts\python.exe -m eval.run_eval --live         # ai-service/  against the running AI service
 ```
+
+`uvicorn` without `--reload` and `php artisan queue:work` both keep code in memory: restart them after changing `ai-service/` or backend job code, or live checks run the old code.
 
 Things that are easy to get wrong here:
 
@@ -75,6 +82,7 @@ Things that are easy to get wrong here:
 - This machine's antivirus blocks a PHP process that deletes several document files in a row, after which every file write in that process fails with "Permission denied". Tests that use `Storage::fake()` should create only the files they need. The same lock makes `composer install` fail intermittently; re-running it finishes the job.
 - PowerShell 5.1's `Set-Content -Encoding utf8` writes a BOM, which breaks `composer.json` and `.env`. Write such files with the Write tool or `[IO.File]::WriteAllText` with a BOM-less encoding.
 - `frontend/AGENTS.md`: Next.js 16 differs from older versions; check `frontend/node_modules/next/dist/docs/` before using an unfamiliar API. Pages under `app/(app)/` set `export const instant = false` in the layout because they render nothing until the session is read.
+- Installing Python packages into `ai-service/venv` from a session can be blocked by the permission classifier. New ingest formats therefore use the standard library (`zipfile` + `xml.etree` for XLSX/PPTX); optional OCR packages are listed in `requirements-ocr.txt` for the owner to install.
 - Redis: Memurai is the intended service; Laragon's bundled Redis (`C:\laragon\bin\redis\redis-x64-5.0.14.1\redis-server.exe`) is a working stand-in on the same port.
 
 ## Content pipeline

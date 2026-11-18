@@ -43,4 +43,13 @@ return [
         'query_timeout' => env('AI_QUERY_TIMEOUT', 300),
     ],
 
+    // OpenID Connect sign-in. Per-organization provider settings live in the
+    // sso_connections table; the identity provider sends the browser back to
+    // this frontend page, which hands the code to /api/sso/callback.
+    'sso' => [
+        'redirect_uri' => env('SSO_REDIRECT_URI', 'http://localhost:3000/sso/callback'),
+        // Development identity providers on http://localhost are allowed only when this is true.
+        'allow_insecure_issuers' => (bool) env('SSO_ALLOW_INSECURE_ISSUERS', false),
+    ],
+
 ];

@@ -9,10 +9,13 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\MessageFeedbackController;
 use App\Http\Controllers\MetricsController;
 use App\Http\Controllers\ProcessingController;
+use App\Http\Controllers\SsoController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+Route::post('/sso/start', [SsoController::class, 'start'])->middleware('throttle:10,1');
+Route::post('/sso/callback', [SsoController::class, 'callback'])->middleware('throttle:10,1');
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -50,6 +53,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // Admin views.
     Route::get('/admin/metrics', MetricsController::class);
+    Route::get('/admin/sso', [SsoController::class, 'showSettings']);
+    Route::put('/admin/sso', [SsoController::class, 'updateSettings']);
     Route::get('/admin/processing', [ProcessingController::class, 'index']);
     Route::post('/admin/failed-jobs/{failedJob}/retry', [ProcessingController::class, 'retry'])->whereNumber('failedJob');
     Route::delete('/admin/failed-jobs/{failedJob}', [ProcessingController::class, 'forget'])->whereNumber('failedJob');

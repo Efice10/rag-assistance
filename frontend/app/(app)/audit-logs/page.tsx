@@ -15,6 +15,8 @@ const ADMIN_ACTIONS: Record<string, string> = {
   "department.created": "Department created",
   "department.renamed": "Department renamed",
   "document.approved": "Document approved",
+  "user.provisioned": "Account created by SSO",
+  "sso.updated": "SSO settings changed",
 };
 
 export default function AuditLogsPage() {

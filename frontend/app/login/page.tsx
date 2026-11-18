@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, ShieldCheck } from "lucide-react";
+import { KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
@@ -30,6 +30,22 @@ export default function LoginPage() {
       setSession({ token: data.token, user: data.user });
     } catch (err) {
       setError(errorMessage(err, "Sign-in failed. Try again."));
+      setSubmitting(false);
+    }
+  }
+
+  async function startSso() {
+    if (!email) {
+      setError("Enter your work email first.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { data } = await api.post<{ authorization_url: string }>("/sso/start", { email });
+      window.location.assign(data.authorization_url);
+    } catch (err) {
+      setError(errorMessage(err, "Single sign-on could not start."));
       setSubmitting(false);
     }
   }
@@ -89,6 +105,21 @@ export default function LoginPage() {
             {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
             {submitting ? "Signing in…" : "Sign in"}
           </button>
+
+          <div className="flex items-center gap-3 text-xs text-slate-400" aria-hidden>
+            <span className="h-px flex-1 bg-slate-200" /> or <span className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <button
+            type="button"
+            onClick={startSso}
+            disabled={submitting}
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+          >
+            <KeyRound className="h-4 w-4" aria-hidden />
+            Sign in with single sign-on
+          </button>
+          <p className="text-center text-xs text-slate-500">Uses your work email&apos;s identity provider, if your organization set one up.</p>
         </form>
       </div>
     </div>

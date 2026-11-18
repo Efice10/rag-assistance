@@ -100,7 +100,7 @@ async function signIn(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Work email").fill(MANAGER.email);
   await page.getByLabel("Password").fill(MANAGER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/chat$/);
 }
 
@@ -139,7 +139,7 @@ test.describe("compliance assistant", () => {
     await page.goto("/login");
     await page.getByLabel("Work email").fill(MANAGER.email);
     await page.getByLabel("Password").fill("not-the-password");
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
     await expect(page.getByText("The provided credentials are incorrect.")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);

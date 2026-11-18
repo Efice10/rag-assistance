@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ClearanceBadge } from "@/components/Badges";
+import { SsoSettings } from "@/components/SsoSettings";
 import { UserModal } from "@/components/UserModal";
 import { api, errorMessage } from "@/lib/api";
 import { setSession, useSession } from "@/lib/session";
@@ -314,6 +315,8 @@ export default function UsersPage() {
 
         <DepartmentsPanel departments={departments} onChanged={loadDepartments} />
       </div>
+
+      <SsoSettings departments={departments} />
 
       {modal && actor && (
         <UserModal

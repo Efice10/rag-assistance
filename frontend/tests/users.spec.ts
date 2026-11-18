@@ -61,6 +61,9 @@ async function stubApi(page: Page) {
       await route.fulfill({ json: { data: users, meta: { current_page: 1, last_page: 1, per_page: 20, total: users.length } } });
     }
   });
+  await page.route("**/api/admin/sso", (route) =>
+    route.fulfill({ json: { data: null, redirect_uri: "http://localhost:3000/sso/callback" } }),
+  );
   await page.route("**/api/users/2/deactivate", async (route) => {
     users[1] = { ...users[1], active: false, deactivated_at: "2026-11-18T10:00:00+00:00" };
     await route.fulfill({ json: { data: users[1] } });
@@ -113,7 +116,7 @@ test("an admin reads analytics, reindexes a failed document and exports the audi
   await page.goto("/login");
   await page.getByLabel("Work email").fill("admin@acme.test");
   await page.getByLabel("Password").fill("password");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/chat$/);
 
   await page.getByRole("link", { name: "Analytics" }).click();
@@ -139,7 +142,7 @@ test("an admin adds a user and deactivates another", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Work email").fill("admin@acme.test");
   await page.getByLabel("Password").fill("password");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/chat$/);
 
   await page.getByRole("link", { name: "Users" }).click();
