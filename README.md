@@ -168,7 +168,7 @@ cd backend
 php vendor\bin\pest
 php vendor\bin\pest --filter="chat scope"          # a single group
 
-# AI service: 63 pytest tests, no database or Ollama needed
+# AI service: 66 pytest tests, no database or Ollama needed (the real-OCR test runs only where Tesseract is installed)
 cd ..\ai-service
 .\venv\Scripts\python.exe -m pytest
 .\venv\Scripts\python.exe -m pytest -k "admin"     # a single test

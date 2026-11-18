@@ -238,22 +238,32 @@ def unique_sources(chunks: list[Chunk]) -> list[dict]:
     return sources
 
 
+FALLBACK_MARGIN = 0.08
+
 _CITATION = re.compile(r"\[([^\[\]]+?),\s*Page\s*(\d+)\]", re.I)
 
 
 def cited_sources(answer: str, chunks: list[Chunk]) -> list[dict]:
-    """The sources the answer actually cites ([Title, Page N]), in the order
-    retrieved. If the model cited nothing recognisable, fall back to every
-    retrieved source rather than show none."""
+    """The sources the answer actually cites, in the order retrieved:
+    1. [Title, Page N] citations (a right title with a wrong page still counts);
+    2. otherwise, retrieved document titles named in the text
+       ("According to the Travel Policy, ...");
+    3. otherwise the retrieved sources close to the best match (within
+       FALLBACK_MARGIN similarity, or an exact-term hit), rather than none."""
     cited = {(title.strip().lower(), int(page)) for title, page in _CITATION.findall(answer)}
     cited_titles = {title for title, _ in cited}
     matched = [
         chunk for chunk in chunks
         if (chunk.document_title.lower(), chunk.page_number) in cited
-        # A right title with a wrong page number still points at the right document.
         or chunk.document_title.lower() in cited_titles
     ]
-    return unique_sources(matched or chunks)
+    if not matched:
+        text = answer.lower()
+        matched = [chunk for chunk in chunks if chunk.document_title.lower() in text]
+    if not matched and chunks:
+        best = max(chunk.similarity for chunk in chunks)
+        matched = [chunk for chunk in chunks if chunk.keyword_match or chunk.similarity >= best - FALLBACK_MARGIN]
+    return unique_sources(matched)
 
 
 def sse(event: str, data: dict) -> str:

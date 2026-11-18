@@ -115,8 +115,24 @@ class TestCitedSources:
 
         assert {source["document_title"] for source in sources} == {"Procurement SOP"}
 
-    def test_no_recognisable_citation_falls_back_to_every_retrieved_source(self):
-        assert len(rag.cited_sources("Three quotes.", self.chunks)) == 3
+    def test_a_title_named_in_plain_words_counts_as_a_citation(self):
+        sources = rag.cited_sources("According to the Travel Policy, book economy.", self.chunks)
+
+        assert {source["document_title"] for source in sources} == {"Travel Policy"}
+
+    def test_no_recognisable_citation_falls_back_to_the_closest_matches(self):
+        # Best similarity 0.9; the 0.6 chunks are too far behind to be listed.
+        assert [s["page_number"] for s in rag.cited_sources("Three quotes.", self.chunks)] == [2]
+
+    def test_the_fallback_keeps_close_matches_and_exact_term_hits(self):
+        chunks = [
+            Chunk(1, "Leave Policy", 1, "x", 0.70),
+            Chunk(2, "Travel Policy", 1, "y", 0.65),
+            Chunk(3, "Rate Card 2027", 1, "z", 0.40, keyword_match=True),
+            Chunk(4, "Fleet Manual", 1, "w", 0.50),
+        ]
+
+        assert {s["document_id"] for s in rag.cited_sources("Book economy.", chunks)} == {1, 2, 3}
 
     def test_a_citation_to_an_unretrieved_document_is_ignored(self):
         sources = rag.cited_sources("Per [Secret Merger Plan, Page 1].", self.chunks)
@@ -370,6 +386,24 @@ class TestOcr:
         monkeypatch.setattr(ocr, "available", lambda: False)
 
         assert ocr.fill_scanned_pages(tmp_path / "x.pdf", [(1, "")]) == ([(1, "")], 0)
+
+    @pytest.mark.skipif(not ocr.available(), reason="Tesseract and requirements-ocr.txt are not installed")
+    def test_real_ocr_reads_an_image_only_pdf(self, tmp_path):
+        from PIL import Image, ImageDraw, ImageFont
+
+        path = tmp_path / "scan.pdf"
+        image = Image.new("RGB", (1700, 1000), "white")
+        try:
+            font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 48)
+        except OSError:
+            font = ImageFont.load_default(size=48)
+        ImageDraw.Draw(image).text((120, 300), "Spills are reported within 15 minutes.", fill="black", font=font)
+        image.save(path, resolution=200)
+
+        pages, count = ingest.extract_pages_with_ocr(path)
+
+        assert count == 1
+        assert "15 minutes" in pages[0][1]
 
     def test_ocr_is_capped_per_document(self, monkeypatch, tmp_path):
         monkeypatch.setattr(ocr, "available", lambda: True)

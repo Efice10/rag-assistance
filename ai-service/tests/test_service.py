@@ -64,9 +64,9 @@ class TestAnswerStream:
 
     def test_streams_tokens_then_unique_sources(self, monkeypatch):
         chunks = [
-            Chunk(11, "Travel Policy", 2, "Flights must be economy.", 0.9),
-            Chunk(11, "Travel Policy", 2, "Hotels are capped.", 0.8),
-            Chunk(12, "Expense SOP", 1, "Submit within 30 days.", 0.7),
+            Chunk(11, "Travel Policy", 2, "Flights must be economy.", 0.90),
+            Chunk(11, "Travel Policy", 2, "Hotels are capped.", 0.88),
+            Chunk(12, "Expense SOP", 1, "Submit within 30 days.", 0.86),
         ]
         monkeypatch.setattr(rag, "retrieve", lambda request: chunks)
         monkeypatch.setattr(rag, "stream_chat", lambda messages: iter(["Economy ", "only."]))
